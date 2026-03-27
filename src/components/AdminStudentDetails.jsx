@@ -85,7 +85,13 @@ const AdminStudentDetails = () => {
                 <p className="flex justify-between border-b border-deep-green/5 pb-2"><span className="font-bold text-deep-green/60">Last Name:</span> <span className="font-medium text-deep-green">{student.personalInfo.lastName}</span></p>
                 <p className="flex justify-between border-b border-deep-green/5 pb-2"><span className="font-bold text-deep-green/60">DOB:</span> <span className="font-medium text-deep-green">{student.personalInfo.dob ? new Date(student.personalInfo.dob).toLocaleDateString() : 'N/A'}</span></p>
                 <p className="flex justify-between border-b border-deep-green/5 pb-2"><span className="font-bold text-deep-green/60">Citizenship:</span> <span className="font-medium text-deep-green">{student.personalInfo.citizenship}</span></p>
-                <p className="flex justify-between pt-1"><span className="font-bold text-deep-green/60">Gender:</span> <span className="font-medium text-deep-green">{student.personalInfo.gender}</span></p>
+                <p className="flex justify-between border-b border-deep-green/5 pb-2"><span className="font-bold text-deep-green/60">Gender:</span> <span className="font-medium text-deep-green">{student.personalInfo.gender}</span></p>
+                
+                {/* Guardian Details */}
+                <h3 className="text-sm font-bold text-deep-green/80 uppercase tracking-wide mt-4 pt-2 border-t border-deep-green/10">Guardian Details</h3>
+                <p className="flex justify-between border-b border-deep-green/5 pb-2"><span className="font-bold text-deep-green/60">Name:</span> <span className="font-medium text-deep-green">{student.personalInfo.guardianName || 'N/A'}</span></p>
+                <p className="flex justify-between border-b border-deep-green/5 pb-2"><span className="font-bold text-deep-green/60">Phone:</span> <span className="font-medium text-deep-green">{student.personalInfo.guardianPhone || 'N/A'}</span></p>
+                <p className="flex justify-between pt-1"><span className="font-bold text-deep-green/60">Email:</span> <span className="font-medium text-deep-green">{student.personalInfo.guardianEmail || 'N/A'}</span></p>
               </div>
             </div>
           )}

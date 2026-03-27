@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css'; // Import Toastify CSS
+import Loader from './Loader';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ const LoginPage = () => {
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // 2. Function to handle typing
   const handleChange = (e) => {
@@ -22,6 +24,7 @@ const LoginPage = () => {
   // 3. Submit logic
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
 
     try {
       const response = await axios.post('/api/auth/login', {
@@ -33,26 +36,15 @@ const LoginPage = () => {
         // Save user info and token to local storage
         localStorage.setItem('user', JSON.stringify(response.data));
 
-        // Success Toast with Redirect callback
-        toast.success("Login Successful! Redirecting...", {
-          position: "top-center",
-          autoClose: 1500,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          theme: "colored",
-          onClose: () => {
-            // Redirect based on role after toast closes
-            if (response.data.role === 'admin') {
-              navigate('/admin');
-            } else {
-              navigate('/colleges');
-            }
-          }
-        });
+        // Directly redirect without toast/alert
+        if (response.data.role === 'admin') {
+          navigate('/admin');
+        } else {
+          navigate('/colleges');
+        }
       }
     } catch (error) {
+      setIsLoading(false);
       console.error(error);
       const errMsg = error.response?.data?.message || "Invalid Email or Password";
 
@@ -152,12 +144,18 @@ const LoginPage = () => {
               </div>
             </div>
 
-            <button
-              className="w-full h-14 bg-primary text-deep-green font-extrabold rounded-xl border border-deep-green shadow-[4px_4px_0px_0px_rgba(52,121,40,1)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(52,121,40,1)] transition-all"
-              type="submit"
-            >
-              Login to Dashboard
-            </button>
+            {isLoading ? (
+              <div className="flex justify-center w-full my-4">
+                <Loader />
+              </div>
+            ) : (
+              <button
+                className="w-full h-14 bg-primary text-deep-green font-extrabold rounded-xl border border-deep-green shadow-[4px_4px_0px_0px_rgba(52,121,40,1)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(52,121,40,1)] transition-all"
+                type="submit"
+              >
+                Login to Dashboard
+              </button>
+            )}
           </form>
 
           <p className="mt-10 text-center text-sm font-medium text-deep-green/60">

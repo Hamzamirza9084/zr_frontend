@@ -70,11 +70,10 @@ const AdminAddUniversity = () => {
     city: "",
     ranking: "",
     website: "",
+    logo: "",
 
     // Admission Rules
     minCgpa: "",
-    acceptedDegrees: "",
-    acceptedBackgrounds: "",
     maxBacklogs: "",
     gapAccepted: "No",
     gapLimit: "",
@@ -85,6 +84,7 @@ const AdminAddUniversity = () => {
 
     // Course Details
     courseName: "",
+    courseLink: "",
     courseLevel: "Master's Degree",
     fieldOfStudy: "",
     duration: "",
@@ -100,6 +100,7 @@ const AdminAddUniversity = () => {
 
   const [tagInput, setTagInput] = useState("");
   const [intakeInput, setIntakeInput] = useState("");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   // CSV Upload State
   const [isUploading, setIsUploading] = useState(false);
@@ -152,6 +153,28 @@ const AdminAddUniversity = () => {
     }
   }, [id, isEditMode, navigate]);
   // ------------------------------------------------
+
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const logoData = new FormData();
+    logoData.append('logo', file);
+
+    try {
+      setUploadingLogo(true);
+      const userString = localStorage.getItem('user');
+      const user = userString ? JSON.parse(userString) : null;
+      const config = { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user?.token}` } };
+      const { data } = await axios.post('/api/universities/upload-logo', logoData, config);
+      setFormData(prev => ({ ...prev, logo: data.url }));
+    } catch (err) {
+      console.error(err);
+      alert("Logo upload failed.");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -210,10 +233,10 @@ const AdminAddUniversity = () => {
 
   const resetForm = () => {
     setFormData({
-      name: "", country: "", city: "", ranking: "", website: "",
-      minCgpa: "", acceptedDegrees: "", acceptedBackgrounds: "", maxBacklogs: "",
+      name: "", country: "", city: "", ranking: "", website: "", logo: "",
+      minCgpa: "", maxBacklogs: "",
       gapAccepted: "No", gapLimit: "", englishRequirements: [], acceptsMOI: "No",
-      courseName: "", courseLevel: "Master's Degree", fieldOfStudy: "", duration: "", tuitionFee: "", intakes: [],
+      courseName: "", courseLink: "", courseLevel: "Master's Degree", fieldOfStudy: "", duration: "", tuitionFee: "", intakes: [],
       casPriority: "Medium", internalProcessing: "No", tags: []
     });
     setTagInput("");
@@ -308,15 +331,15 @@ const AdminAddUniversity = () => {
             city: getValue('city'),
             ranking: getValue('ranking'),
             website: getValue('website'),
+            logo: getValue('logo'),
             courseName: getValue('courseName'),
+            courseLink: getValue('courseLink'),
             courseLevel: getValue('courseLevel'),
             fieldOfStudy: getValue('fieldOfStudy'),
             duration: getValue('duration'),
             tuitionFee: getValue('tuitionFee'),
             intakes: parseArrayField(getValue('intakes')),
             minCgpa: getValue('minCgpa'),
-            acceptedDegrees: getValue('acceptedDegrees'),
-            acceptedBackgrounds: getValue('acceptedBackgrounds'),
             maxBacklogs: getValue('maxBacklogs') ? parseInt(getValue('maxBacklogs')) : '',
             gapAccepted: getValue('gapAccepted') || 'No',
             gapLimit: getValue('gapLimit') ? parseInt(getValue('gapLimit')) : '',
@@ -503,6 +526,15 @@ const AdminAddUniversity = () => {
               <StyledInput label="City" name="city" value={formData.city} onChange={handleChange} placeholder="e.g. London" />
               <StyledInput label="Global Ranking (Optional)" name="ranking" value={formData.ranking} onChange={handleChange} type="number" placeholder="e.g. 102" />
               <StyledInput label="Website URL" name="website" value={formData.website} onChange={handleChange} placeholder="https://..." />
+              
+              <div className="md:col-span-2">
+                <label className="block text-sm font-bold text-deep-green mb-2">University Logo</label>
+                <div className="flex items-center gap-3">
+                  <input type="file" accept="image/*" onChange={handleLogoUpload} className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-primary/20 file:text-primary hover:file:bg-primary/30 appearance-none outline-none border-2 border-deep-green/10 rounded-xl px-2 py-1 w-full bg-white transition-colors" disabled={uploadingLogo} />
+                  {uploadingLogo && <span className="text-xs text-primary font-bold animate-pulse whitespace-nowrap bg-primary/10 px-3 py-2 rounded-xl">Uploading...</span>}
+                  {formData.logo && !uploadingLogo && <img src={formData.logo} alt="Logo" className="h-12 w-12 object-contain rounded-xl border-2 border-deep-green/10 bg-white shadow-sm" />}
+                </div>
+              </div>
             </div>
           </section>
 
@@ -513,7 +545,12 @@ const AdminAddUniversity = () => {
               Course Details
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <StyledInput label="Course Name" name="courseName" value={formData.courseName} onChange={handleChange} placeholder="e.g. MSc Data Science" className="md:col-span-2" />
+              <div className="md:col-span-2">
+                <StyledInput label="Course Name" name="courseName" value={formData.courseName} onChange={handleChange} placeholder="e.g. MSc Data Science" className="md:col-span-2" />
+              </div>
+              <div className="md:col-span-2">
+                <StyledInput label="Course Link" name="courseLink" value={formData.courseLink} onChange={handleChange} placeholder="e.g. https://university.edu/course-page" className="md:col-span-2" />
+              </div>
 
               <StyledSelect
                 label="Program Level"
@@ -581,13 +618,6 @@ const AdminAddUniversity = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <StyledInput label="Min Percentage / CGPA" name="minCgpa" value={formData.minCgpa} onChange={handleChange} placeholder="e.g. 60% or 6.5 CGPA" />
               <StyledInput label="Max Backlogs Allowed" name="maxBacklogs" value={formData.maxBacklogs} onChange={handleChange} type="number" placeholder="e.g. 10" />
-
-              <div className="md:col-span-2">
-                <StyledInput label="Accepted Degrees" name="acceptedDegrees" value={formData.acceptedDegrees} onChange={handleChange} placeholder="e.g. B.Tech, BCA, BSc IT" />
-              </div>
-              <div className="md:col-span-2">
-                <StyledInput label="Accepted Backgrounds" name="acceptedBackgrounds" value={formData.acceptedBackgrounds} onChange={handleChange} placeholder="e.g. IT, CS, Math background only" />
-              </div>
 
               <StyledSelect label="Gap Accepted?" name="gapAccepted" value={formData.gapAccepted} onChange={handleChange} options={["No", "Yes"]} />
 

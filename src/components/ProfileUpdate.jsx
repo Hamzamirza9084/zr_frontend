@@ -20,7 +20,10 @@ const ProfileUpdate = () => {
         number: "",
         expiryDate: "",
         placeOfBirth: ""
-      }
+      },
+      guardianName: "",
+      guardianPhone: "",
+      guardianEmail: ""
     },
     address: {
       street: "", city: "", country: "", state: "", zipCode: "",
@@ -207,6 +210,10 @@ const ProfileUpdate = () => {
       if (!p.passport.expiryDate) newErrors['passportExpiry'] = true;
       if (!p.passport.placeOfBirth) newErrors['placeOfBirth'] = true;
     }
+    
+    if (!p.guardianName) newErrors['guardianName'] = true;
+    if (!p.guardianPhone) newErrors['guardianPhone'] = true;
+    if (!p.guardianEmail) newErrors['guardianEmail'] = true;
 
     const a = formData.address;
     if (!a.street) newErrors['street'] = true;
@@ -401,42 +408,7 @@ const ProfileUpdate = () => {
 
   const handleView = (doc) => {
     if (!doc || !doc.fileUrl) return alert('No file URL available');
-    (async () => {
-      try {
-        const user = JSON.parse(localStorage.getItem('user'));
-        const token = user?.token;
-        if (!token) return alert('Please login to view files');
-
-        const filename = doc.fileUrl.split('/').pop();
-        const url = `/api/users/documents/view/${encodeURIComponent(filename)}`;
-
-        const res = await axios.get(url, {
-          headers: { Authorization: `Bearer ${token}` },
-          responseType: 'blob'
-        });
-
-        const contentType = res.headers['content-type'] || 'application/pdf';
-        const blob = new Blob([res.data], { type: contentType });
-        const blobUrl = window.URL.createObjectURL(blob);
-
-        // Try to open in a new tab; if popup blocked, trigger download
-        const newWin = window.open(blobUrl, '_blank');
-        if (!newWin) {
-          const link = document.createElement('a');
-          link.href = blobUrl;
-          link.download = doc.fileName || filename;
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-        }
-
-        // Revoke URL after a short delay
-        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 20000);
-      } catch (err) {
-        console.error(err.response?.data || err.message);
-        alert(err.response?.data?.message || 'Unable to view document');
-      }
-    })();
+    window.open(doc.fileUrl, '_blank');
   };
 
   const handleDelete = async (doc) => {
@@ -539,6 +511,16 @@ const ProfileUpdate = () => {
                   <InputGroup label="Passport Number" name="passportNumber" value={formData.personalInfo.passport.number} onChange={handlePersonalChange} error={errors.passportNumber} />
                   <InputGroup type="date" label="Expiry Date" name="passportExpiry" value={formData.personalInfo.passport.expiryDate} onChange={handlePersonalChange} error={errors.passportExpiry} />
                   <InputGroup label="Place of Birth" name="placeOfBirth" value={formData.personalInfo.passport.placeOfBirth} onChange={handlePersonalChange} error={errors.placeOfBirth} />
+                </div>
+              </div>
+
+              {/* Guardian Section */}
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4">
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Guardian Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <InputGroup label="Guardian Name" name="guardianName" value={formData.personalInfo.guardianName} onChange={handlePersonalChange} error={errors.guardianName} />
+                  <InputGroup label="Guardian Phone Number" name="guardianPhone" value={formData.personalInfo.guardianPhone} onChange={handlePersonalChange} error={errors.guardianPhone} />
+                  <InputGroup label="Guardian Email" name="guardianEmail" value={formData.personalInfo.guardianEmail} type="email" onChange={handlePersonalChange} error={errors.guardianEmail} />
                 </div>
               </div>
 
@@ -793,18 +775,12 @@ const ProfileUpdate = () => {
                           onChange={(e) => handleEducationChange(index, 'schoolAddress', e.target.value, true, 'city')} 
                           error={errors[`edu_schoolAddress_city_${index}`]}
                         />
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Province/State</label>
-                          <select 
-                            value={edu.schoolAddress.state}
-                            onChange={(e) => handleEducationChange(index, 'schoolAddress', e.target.value, true, 'state')}
-                            className={`w-full rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 border p-2.5 ${errors[`edu_schoolAddress_state_${index}`] ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
-                          >
-                            <option value="">Select State</option>
-                            <option value="NY">New York</option>
-                            <option value="CA">California</option>
-                          </select>
-                        </div>
+                        <InputGroup 
+                          label="Province/State" 
+                          value={edu.schoolAddress.state} 
+                          onChange={(e) => handleEducationChange(index, 'schoolAddress', e.target.value, true, 'state')} 
+                          error={errors[`edu_schoolAddress_state_${index}`]}
+                        />
                       </div>
                       <div className="w-full md:w-1/3">
                         <InputGroup 

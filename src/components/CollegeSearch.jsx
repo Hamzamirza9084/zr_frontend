@@ -873,9 +873,13 @@ const CollegeSearch = () => {
                   {/* Header Section */}
                   <div className="p-6 pb-4 flex justify-between items-start gap-4 border-b border-deep-green/5">
                     <div className="flex gap-4 flex-1">
-                      {/* University Icon */}
-                      <div className="size-12 rounded-lg bg-off-white border border-deep-green/10 flex items-center justify-center flex-shrink-0">
-                        <span className="material-symbols-outlined text-deep-green text-2xl">apartment</span>
+                      {/* University Icon / Logo */}
+                      <div className="size-12 rounded-lg bg-white border border-deep-green/10 flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm">
+                        {college.logo ? (
+                          <img src={college.logo} alt={`${college.name} Logo`} className="w-full h-full object-contain p-1" />
+                        ) : (
+                          <span className="material-symbols-outlined text-deep-green/50 text-2xl">apartment</span>
+                        )}
                       </div>
                       {/* University Info */}
                       <div className="flex-1">
@@ -889,6 +893,12 @@ const CollegeSearch = () => {
                   <div className="px-6 pt-4 pb-3">
                     <p className="text-[10px] font-bold text-deep-green/50 uppercase tracking-wider mb-1">{college.courseLevel || "Program Level"}</p>
                     <h3 className="text-lg font-extrabold text-deep-green uppercase leading-tight">{college.courseName || "Unknown Course"}</h3>
+                    {college.courseLink && (
+                      <a href={college.courseLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 mt-1.5 transition-colors">
+                        <span className="material-symbols-outlined text-[14px]">link</span>
+                        View Course Details
+                      </a>
+                    )}
                   </div>
 
                   {/* Tags */}
