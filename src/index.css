@@ -1,0 +1,72 @@
+@import "tailwindcss";
+/* Import Google Fonts for the new theme */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700;0,900;1,400&display=swap');
+
+@theme {
+  --color-primary: #CCA34A;
+  --color-deep-green: #0F4C3A;
+  --color-light-green: #E6F4EA;
+  --color-off-white: #FDFBF7;
+  --color-background-light: #FFFFFF;
+  --color-background-dark: #0F4C3A;
+  
+  --font-display: "Merriweather", serif;
+  --font-body: "Inter", sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-background-light text-gray-800 font-body antialiased;
+}
+
+/* Scrollbar styling to match the Gold/Green theme */
+@layer components {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #CCA34A; /* Gold scrollbar */
+    border-radius: 20px;
+  }
+  
+  /* Utility for the elegant serif headings */
+  .heading-serif {
+    @apply font-display font-bold text-deep-green;
+  }
+  
+  /* Header text color: use the gold primary color */
+  header,
+  header a,
+  header h1,
+  header h2,
+  header p,
+  header span,
+  header nav,
+  header .material-symbols-outlined {
+    color: var(--color-primary) !important;
+  }
+
+  /* Logo highlight on hover: scale + gold glow so users notice the logo */
+  header a.group img {
+    transition: transform .22s ease, filter .22s ease, opacity .22s ease;
+    transform-origin: center;
+    display: block;
+    will-change: transform, filter;
+  }
+
+  header a.group:hover img {
+    transform: scale(1.08);
+    filter: drop-shadow(0 8px 20px rgba(204,163,74,0.28)) brightness(1.05) saturate(1.08);
+  }
+
+  header a.group:hover h2 {
+    color: var(--color-primary) !important;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+  }
+}
