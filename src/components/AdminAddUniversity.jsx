@@ -94,6 +94,8 @@ const AdminAddUniversity = () => {
     // Additional
     casPriority: "Medium",
     internalProcessing: "No",
+    appFee: "Free Waiver",
+    successChance: "High",
 
     tags: [] // Kept for flexible extra tags
   });
@@ -101,6 +103,25 @@ const AdminAddUniversity = () => {
   const [tagInput, setTagInput] = useState("");
   const [intakeInput, setIntakeInput] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [showNewCountryInput, setShowNewCountryInput] = useState(false);
+
+  // Global Destinations from DB
+  const [destinations, setDestinations] = useState(["United States of America", "Canada", "United Kingdom", "Australia", "Ireland", "Germany"]);
+
+  // Fetch Global Destinations
+  useEffect(() => {
+    const fetchDestinations = async () => {
+      try {
+        const { data } = await axios.get('/api/destinations');
+        if (data && data.length > 0) {
+          setDestinations(data.map(d => d.name));
+        }
+      } catch (err) {
+        console.error("Failed to fetch destinations:", err);
+      }
+    };
+    fetchDestinations();
+  }, []);
 
   // CSV Upload State
   const [isUploading, setIsUploading] = useState(false);
@@ -142,7 +163,14 @@ const AdminAddUniversity = () => {
             tags: data.tags || [],
             intakes: data.intakes || [],
             englishRequirements: data.englishRequirements || [],
+            appFee: data.appFee || 'Free Waiver',
+            successChance: data.successChance || 'High'
           });
+          
+          // Use a default list to check against if destinations state hasn't populated yet,
+          // though typically data.country will just be shown as custom if it's not in the dropdown.
+          // Wait to check until destinations are actually mapped in the effect below? 
+          // We can just rely on the component checking it. For simplicity we check fetched list.
         } catch (err) {
           console.error("Failed to fetch university details:", err);
           alert("Could not load university data for editing.");
@@ -152,6 +180,14 @@ const AdminAddUniversity = () => {
       fetchUniversity();
     }
   }, [id, isEditMode, navigate]);
+  // Handle setting showNewCountryInput when destinations or form data change
+  useEffect(() => {
+    if (isEditMode && formData.country && destinations.length > 0) {
+      if (!destinations.includes(formData.country)) {
+        setShowNewCountryInput(true);
+      }
+    }
+  }, [formData.country, destinations, isEditMode]);
   // ------------------------------------------------
 
   const handleLogoUpload = async (e) => {
@@ -237,7 +273,7 @@ const AdminAddUniversity = () => {
       minCgpa: "", maxBacklogs: "",
       gapAccepted: "No", gapLimit: "", englishRequirements: [], acceptsMOI: "No",
       courseName: "", courseLink: "", courseLevel: "Master's Degree", fieldOfStudy: "", duration: "", tuitionFee: "", intakes: [],
-      casPriority: "Medium", internalProcessing: "No", tags: []
+      casPriority: "Medium", internalProcessing: "No", appFee: "Free Waiver", successChance: "High", tags: []
     });
     setTagInput("");
     setIntakeInput("");
@@ -347,6 +383,8 @@ const AdminAddUniversity = () => {
             acceptsMOI: getValue('acceptsMOI') || 'No',
             casPriority: getValue('casPriority') || 'Medium',
             internalProcessing: getValue('internalProcessing') || 'No',
+            appFee: getValue('appFee') || 'Free Waiver',
+            successChance: getValue('successChance') || 'High',
             tags: parseArrayField(getValue('tags'))
           };
 
@@ -426,6 +464,17 @@ const AdminAddUniversity = () => {
           Authorization: `Bearer ${user.token}`, // Send token in header
         },
       };
+
+      // Add Destination if Custom
+      if (showNewCountryInput && formData.country.trim()) {
+        try {
+          await axios.post('/api/destinations', { name: formData.country.trim() }, config);
+          // Optimistically add to state
+          setDestinations(prev => [...new Set([...prev, formData.country.trim()])]);
+        } catch (err) {
+          console.error("Could not append destination to database (may already exist):", err);
+        }
+      }
 
       if (isEditMode) {
         // Edit mode: PUT to specific ID
@@ -516,13 +565,43 @@ const AdminAddUniversity = () => {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <StyledInput label="University Name" name="name" value={formData.name} onChange={handleChange} placeholder="e.g. University of Westminster" className="md:col-span-2" />
-              <StyledSelect
-                label="Destination"
-                name="country"
-                value={formData.country || ""}
-                onChange={handleChange}
-                options={["", "United States of America", "Canada", "United Kingdom", "Australia", "Ireland", "Germany"]}
-              />
+              {showNewCountryInput ? (
+                <div className="flex items-end gap-2">
+                  <StyledInput
+                    label="Custom Destination"
+                    name="country"
+                    value={formData.country}
+                    onChange={handleChange}
+                    placeholder="Enter country name..."
+                    className="flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewCountryInput(false);
+                      setFormData(prev => ({ ...prev, country: "" }));
+                    }}
+                    className="px-4 py-2.5 rounded-xl border-2 border-light-green bg-white text-deep-green text-sm font-bold hover:bg-light-green/20 transition-colors h-[44px]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <StyledSelect
+                  label="Destination"
+                  name="country"
+                  value={formData.country || ""}
+                  onChange={(e) => {
+                    if (e.target.value === "Add New Destination...") {
+                      setShowNewCountryInput(true);
+                      setFormData(prev => ({ ...prev, country: "" }));
+                    } else {
+                      handleChange(e);
+                    }
+                  }}
+                  options={["", ...destinations, "Add New Destination..."]}
+                />
+              )}
               <StyledInput label="City" name="city" value={formData.city} onChange={handleChange} placeholder="e.g. London" />
               <StyledInput label="Global Ranking (Optional)" name="ranking" value={formData.ranking} onChange={handleChange} type="number" placeholder="e.g. 102" />
               <StyledInput label="Website URL" name="website" value={formData.website} onChange={handleChange} placeholder="https://..." />
@@ -711,6 +790,8 @@ const AdminAddUniversity = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
               <StyledSelect label="CAS Priority" name="casPriority" value={formData.casPriority} onChange={handleChange} options={["High", "Medium", "Low"]} />
               <StyledSelect label="Internal Processing?" name="internalProcessing" value={formData.internalProcessing} onChange={handleChange} options={["Yes", "No"]} />
+              <StyledInput label="Application Fee" name="appFee" value={formData.appFee || ''} onChange={handleChange} placeholder="e.g. Free Waiver, £50, etc." />
+              <StyledSelect label="Success Chance" name="successChance" value={formData.successChance || 'High'} onChange={handleChange} options={["Very High", "High", "Medium", "Low", "Waitlisted"]} />
               <StyledSelect
                 label="Program Tag"
                 name="tags"

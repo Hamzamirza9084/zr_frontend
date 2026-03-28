@@ -129,7 +129,7 @@ const FilterContent = ({ formData, handleChange, setFormData, handleEvaluate, in
 
           {/* Dropdowns Group 1 */}
           <div className="grid grid-cols-2 gap-3">
-            <StyledSelect label="Destination" name="destination" value={formData.destination || ""} onChange={handleChange} options={["", ...destinations]} />
+            <StyledSelect label="Destination" name="destination" value={formData.destination} onChange={handleChange} options={["All Destinations", ...destinations]} />
             <StyledSelect label="Institution" name="institution" value={formData.institution || ""} onChange={handleChange} options={["", ...institutions]} />
           </div>
 
@@ -315,7 +315,7 @@ const CollegeSearch = () => {
     fieldStream: "",
     intake: "Any Intake",
     budget: 25000,
-    destination: "",
+    destination: "All Destinations",
     institution: "",
     programLevel: "",
     fieldOfStudy: "",
@@ -342,6 +342,51 @@ const CollegeSearch = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filteredColleges, setFilteredColleges] = useState([]);
+  const [savedColleges, setSavedColleges] = useState([]);
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+
+  useEffect(() => {
+    const fetchSaved = async () => {
+      try {
+        const userString = localStorage.getItem('user');
+        if (!userString) return;
+        const user = JSON.parse(userString);
+        if (!user.token) return;
+        const config = { headers: { Authorization: `Bearer ${user.token}` } };
+        const { data } = await axios.get('/api/auth/saved-colleges', config);
+        setSavedColleges(data);
+      } catch (err) {
+        console.error("Failed to fetch saved colleges:", err);
+      }
+    };
+    fetchSaved();
+  }, []);
+
+  const toggleSave = async (collegeId) => {
+    try {
+      const userString = localStorage.getItem('user');
+      if (!userString) {
+        alert("Please login to save colleges.");
+        return;
+      }
+      const user = JSON.parse(userString);
+      if (!user.token) return;
+      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      
+      // Optimistic UI update
+      setSavedColleges(prev => 
+        prev.includes(collegeId) 
+          ? prev.filter(id => id !== collegeId)
+          : [...prev, collegeId]
+      );
+      
+      const { data } = await axios.post(`/api/auth/saved-colleges/${collegeId}`, {}, config);
+      setSavedColleges(data); // Sync with actual server state
+    } catch (err) {
+      console.error("Failed to toggle save:", err);
+      alert("Error saving college.");
+    }
+  };
 
   // Auth Check
   useEffect(() => {
@@ -451,7 +496,7 @@ const CollegeSearch = () => {
       fieldStream: "",
       intake: "Any Intake",
       budget: 25000,
-      destination: "",
+      destination: "All Destinations",
       institution: "",
       programLevel: "",
       fieldOfStudy: "",
@@ -533,7 +578,7 @@ const CollegeSearch = () => {
     let results = [...colleges];
 
     // 1. Destination (Country)
-    if (formData.destination) {
+    if (formData.destination && formData.destination !== "All Destinations") {
       results = results.filter(uni => {
         const match = uni.country?.toLowerCase().trim() === formData.destination.toLowerCase().trim();
         return match;
@@ -737,7 +782,7 @@ const CollegeSearch = () => {
                   // Same dynamic filtering for mobile
                   institutions={[...new Set(
                     colleges
-                      .filter(c => !formData.destination || c.country?.toLowerCase().trim() === formData.destination.toLowerCase().trim())
+                      .filter(c => formData.destination === "All Destinations" || !formData.destination || c.country?.toLowerCase().trim() === formData.destination.toLowerCase().trim())
                       .map(c => c.name)
                   )].sort()}
                 />
@@ -788,7 +833,7 @@ const CollegeSearch = () => {
             // Dynamically filter institutions based on selected Destination
             institutions={[...new Set(
               colleges
-                .filter(c => !formData.destination || c.country?.toLowerCase().trim() === formData.destination.toLowerCase().trim())
+                .filter(c => formData.destination === "All Destinations" || !formData.destination || c.country?.toLowerCase().trim() === formData.destination.toLowerCase().trim())
                 .map(c => c.name)
             )].sort()}
           />
@@ -820,7 +865,16 @@ const CollegeSearch = () => {
               <p className="text-deep-green/70 mt-2 font-medium">Found <span className="text-deep-green font-black underline decoration-primary decoration-4 underline-offset-2">{filteredColleges.length}</span> programs based on your profile.</p>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
+              {/* Show Saved Toggle */}
+              <button
+                onClick={() => setShowSavedOnly(!showSavedOnly)}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border-2 transition-all shadow-sm font-bold ${showSavedOnly ? 'border-pink-500 bg-pink-50 text-pink-600' : 'border-deep-green/10 bg-white text-deep-green hover:bg-light-green/20'}`}
+              >
+                <span className={`material-symbols-outlined text-[20px] ${showSavedOnly ? 'text-pink-500' : ''}`}>favorite</span>
+                {showSavedOnly ? 'Showing Saved' : 'Show Saved'}
+              </button>
+
               {/* NEW MOBILE FILTER BUTTON */}
               <button
                 onClick={() => setShowMobileFilters(true)}
@@ -829,8 +883,6 @@ const CollegeSearch = () => {
                 <span className="material-symbols-outlined text-[20px]">filter_list</span>
                 Filters
               </button>
-
-
             </div>
           </div>
 
@@ -849,7 +901,7 @@ const CollegeSearch = () => {
           ) : (
             /* Grid */
             <motion.div
-              key={filteredColleges.map(c => c._id).join(',')}
+              key={filteredColleges.map(c => c._id).join(',') + `-saved-${showSavedOnly}`}
               className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
               initial="hidden"
               animate="show"
@@ -861,40 +913,40 @@ const CollegeSearch = () => {
                 }
               }}
             >
-              {filteredColleges.map((college, idx) => (
+              {(showSavedOnly ? filteredColleges.filter(c => savedColleges.includes(c._id)) : filteredColleges).map((college, idx) => (
                 <motion.div
                   key={college._id || idx}
                   variants={{
                     hidden: { opacity: 0, y: 20 },
                     show: { opacity: 1, y: 0 }
                   }}
-                  className="bg-white rounded-2xl border border-deep-green/10 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden"
+                  className="bg-[#00674F] rounded-2xl border border-black/20 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col h-full"
                 >
                   {/* Header Section */}
-                  <div className="p-6 pb-4 flex justify-between items-start gap-4 border-b border-deep-green/5">
+                  <div className="p-6 pb-4 flex justify-between items-start gap-4 border-b border-white/10">
                     <div className="flex gap-4 flex-1">
                       {/* University Icon / Logo */}
-                      <div className="size-12 rounded-lg bg-white border border-deep-green/10 flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm">
+                      <div className="size-12 rounded-lg bg-white border border-white/10 flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm">
                         {college.logo ? (
                           <img src={college.logo} alt={`${college.name} Logo`} className="w-full h-full object-contain p-1" />
                         ) : (
-                          <span className="material-symbols-outlined text-deep-green/50 text-2xl">apartment</span>
+                          <span className="material-symbols-outlined text-[#00674F] text-2xl">apartment</span>
                         )}
                       </div>
                       {/* University Info */}
                       <div className="flex-1">
-                        <h4 className="text-sm font-bold text-deep-green">{college.name || "Unknown University"}</h4>
-                        <p className="text-xs text-deep-green/60">{college.city || ""}{college.city && college.country ? ", " : ""}{college.country || ""}</p>
+                        <h4 className="text-sm font-bold text-white">{college.name || "Unknown University"}</h4>
+                        <p className="text-xs text-white/80">{college.city || ""}{college.city && college.country ? ", " : ""}{college.country || ""}</p>
                       </div>
                     </div>
                   </div>
 
                   {/* Course Info */}
                   <div className="px-6 pt-4 pb-3">
-                    <p className="text-[10px] font-bold text-deep-green/50 uppercase tracking-wider mb-1">{college.courseLevel || "Program Level"}</p>
-                    <h3 className="text-lg font-extrabold text-deep-green uppercase leading-tight">{college.courseName || "Unknown Course"}</h3>
+                    <p className="text-[10px] font-bold text-white/60 uppercase tracking-wider mb-1">{college.courseLevel || "Program Level"}</p>
+                    <h3 className="text-lg font-extrabold text-white uppercase leading-tight">{college.courseName || "Unknown Course"}</h3>
                     {college.courseLink && (
-                      <a href={college.courseLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 mt-1.5 transition-colors">
+                      <a href={college.courseLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-white mt-1.5 transition-colors">
                         <span className="material-symbols-outlined text-[14px]">link</span>
                         View Course Details
                       </a>
@@ -905,7 +957,7 @@ const CollegeSearch = () => {
                   {college.tags && college.tags.length > 0 && (
                     <div className="px-6 pb-4 flex flex-wrap gap-2">
                       {college.tags.slice(0, 3).map((tag, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 text-[11px] font-bold text-deep-green/70">
+                        <span key={i} className="inline-flex items-center gap-1 text-[11px] font-bold text-white/90">
                           <span className="material-symbols-outlined text-[14px]">
                             {tag.includes('Scholarship') ? 'school' : tag.includes('Demand') ? 'trending_up' : 'verified'}
                           </span>
@@ -915,76 +967,76 @@ const CollegeSearch = () => {
                     </div>
                   )}
 
-                  <div className="px-6 border-t border-deep-green/5">
+                  <div className="px-6 border-t border-white/10">
                     {/* Info Rows */}
                     <div className="py-4 space-y-3">
                       <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-deep-green/50 uppercase">Duration</span>
-                        <span className="text-sm font-bold text-deep-green">
+                        <span className="text-xs font-bold text-white/60 uppercase">Duration</span>
+                        <span className="text-sm font-bold text-white">
                           {college.duration 
                             ? (/^\d+$/.test(college.duration.toString().trim()) ? `${college.duration} Months` : college.duration)
                             : "N/A"}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center border-t border-deep-green/5 pt-3">
-                        <span className="text-xs font-bold text-deep-green/50 uppercase">App Fee</span>
-                        <span className="text-sm font-bold text-teal-600">Free Waiver</span>
+                      <div className="flex justify-between items-center border-t border-white/10 pt-3">
+                        <span className="text-xs font-bold text-white/60 uppercase">App Fee</span>
+                        <span className="text-sm font-bold text-white/90">{college.appFee || 'Free Waiver'}</span>
                       </div>
-                      <div className="flex justify-between items-center border-t border-deep-green/5 pt-3">
-                        <span className="text-xs font-bold text-deep-green/50 uppercase">Success Chance</span>
+                      <div className="flex justify-between items-center border-t border-white/10 pt-3">
+                        <span className="text-xs font-bold text-white/60 uppercase">Success Chance</span>
                         <div className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-teal-500"></span>
-                          <span className="text-sm font-bold text-teal-600">High</span>
+                          <span className={`w-2 h-2 rounded-full ${(!college.successChance || college.successChance.includes('High')) ? 'bg-green-400' : college.successChance === 'Medium' ? 'bg-yellow-400' : 'bg-red-400'}`}></span>
+                          <span className="text-sm font-bold text-white/90">{college.successChance || 'High'}</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Requirement & Tuition Box */}
-                  <div className="mx-6 my-4 p-4 bg-light-green/20 border border-light-green/50 rounded-xl">
+                  <div className="mx-6 my-4 p-4 bg-white/10 border border-white/20 rounded-xl">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-[10px] font-bold text-deep-green/60 uppercase tracking-wider mb-2">English Req</p>
+                        <p className="text-[10px] font-bold text-white/60 uppercase tracking-wider mb-2">English Req</p>
                         <div className="flex flex-wrap gap-1">
                           {college.englishRequirements && college.englishRequirements.length > 0 ? (
                             college.englishRequirements.slice(0, 2).map((req, i) => (
-                              <span key={i} className="text-xs font-extrabold text-deep-green bg-white px-1.5 py-0.5 rounded border border-deep-green/10">
+                              <span key={i} className="text-xs font-extrabold text-[#00674F] bg-white px-1.5 py-0.5 rounded border border-white/20">
                                 {req.testName}: {req.minOverall}
                               </span>
                             ))
                           ) : (
-                            <span className="text-sm font-extrabold text-deep-green">N/A</span>
+                            <span className="text-sm font-extrabold text-white">N/A</span>
                           )}
-                          {college.englishRequirements?.length > 2 && <span className="text-[10px] text-deep-green/60 font-bold self-center">+{college.englishRequirements.length - 2}</span>}
+                          {college.englishRequirements?.length > 2 && <span className="text-[10px] text-white/60 font-bold self-center">+{college.englishRequirements.length - 2}</span>}
                         </div>
                       </div>
                       <div>
-                        <p className="text-[10px] font-bold text-deep-green/60 uppercase tracking-wider mb-2">Tuition (1st yr)</p>
-                        <p className="text-base font-extrabold text-deep-green">{college.tuitionFee ? `$${college.tuitionFee}` : "N/A"}</p>
+                        <p className="text-[10px] font-bold text-white/60 uppercase tracking-wider mb-2">Tuition (1st yr)</p>
+                        <p className="text-base font-extrabold text-white">{college.tuitionFee ? `$${college.tuitionFee}` : "N/A"}</p>
                       </div>
                     </div>
                   </div>
 
                   {/* Available Intakes */}
-                  <div className="px-6 py-4 border-t border-deep-green/5">
-                    <p className="text-[10px] font-bold text-deep-green/50 uppercase tracking-wider mb-3">Available Intakes</p>
+                  <div className="px-6 py-4 border-t border-white/10">
+                    <p className="text-[10px] font-bold text-white/60 uppercase tracking-wider mb-3">Available Intakes</p>
                     <div className="flex gap-3">
                       {college.intakes ? (
                         typeof college.intakes === 'string' ? (
                           college.intakes.split(',').slice(0, 3).map((intake, i) => (
-                            <span key={i} className="px-4 py-2 bg-off-white border border-deep-green/10 rounded-lg text-xs font-bold text-deep-green">
+                            <span key={i} className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-xs font-bold text-white">
                               {intake.trim()}
                             </span>
                           ))
                         ) : (
                           Array.isArray(college.intakes) && college.intakes.slice(0, 3).map((intake, i) => (
-                            <span key={i} className="px-4 py-2 bg-off-white border border-deep-green/10 rounded-lg text-xs font-bold text-deep-green">
+                            <span key={i} className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-xs font-bold text-white">
                               {intake}
                             </span>
                           ))
                         )
                       ) : (
-                        <span className="px-4 py-2 bg-off-white border border-deep-green/10 rounded-lg text-xs font-bold text-deep-green/60">
+                        <span className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-xs font-bold text-white/80">
                           Check availability
                         </span>
                       )}
@@ -992,10 +1044,10 @@ const CollegeSearch = () => {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="px-6 py-5 flex gap-3 items-center">
+                  <div className="px-6 py-5 flex gap-3 items-center mt-auto">
                     <button
                       onClick={() => handleApply(college._id)}
-                      className="flex-1 py-3 text-deep-green font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm"
+                      className="flex-1 py-3 text-[#00674F] font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-md"
                       style={{ backgroundColor: '#cca34a' }}
                       onMouseEnter={(e) => e.target.style.backgroundColor = '#b8933d'}
                       onMouseLeave={(e) => e.target.style.backgroundColor = '#cca34a'}
@@ -1003,8 +1055,13 @@ const CollegeSearch = () => {
                       Apply Now
                       <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
                     </button>
-                    <button className="text-deep-green/40 hover:text-red-500 transition-colors p-2">
-                      <span className="material-symbols-outlined text-2xl">favorite_border</span>
+                    <button
+                      onClick={() => toggleSave(college._id)}
+                      className={`transition-colors p-2 ${savedColleges.includes(college._id) ? 'text-pink-500 hover:text-pink-400' : 'text-white/60 hover:text-pink-400'}`}
+                    >
+                      <span className="material-symbols-outlined text-2xl">
+                        {savedColleges.includes(college._id) ? 'favorite' : 'favorite_border'}
+                      </span>
                     </button>
                   </div>
                 </motion.div>

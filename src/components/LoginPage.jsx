@@ -66,6 +66,9 @@ const LoginPage = () => {
       {/* Toast Notification Container */}
       <ToastContainer />
 
+      {/* RENDER THE FULL SCREEN LOADER HERE */}
+      {isLoading && <Loader />}
+
       {/* Left Section: Visual & Branding (Hidden on mobile) */}
       <section className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 bg-light-green/20">
         <div className="relative z-10 flex-1 flex flex-col justify-center items-center">
@@ -144,18 +147,13 @@ const LoginPage = () => {
               </div>
             </div>
 
-            {isLoading ? (
-              <div className="flex justify-center w-full my-4">
-                <Loader />
-              </div>
-            ) : (
-              <button
-                className="w-full h-14 bg-primary text-deep-green font-extrabold rounded-xl border border-deep-green shadow-[4px_4px_0px_0px_rgba(52,121,40,1)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(52,121,40,1)] transition-all"
-                type="submit"
-              >
-                Login to Dashboard
-              </button>
-            )}
+            <button
+              className="w-full h-14 bg-primary text-deep-green font-extrabold rounded-xl border border-deep-green shadow-[4px_4px_0px_0px_rgba(52,121,40,1)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(52,121,40,1)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              type="submit"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Processing...' : 'Login to Dashboard'}
+            </button>
           </form>
 
           <p className="mt-10 text-center text-sm font-medium text-deep-green/60">

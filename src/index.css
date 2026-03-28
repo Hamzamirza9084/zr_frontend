@@ -40,18 +40,7 @@ body {
     @apply font-display font-bold text-deep-green;
   }
   
-  /* Header text color: use the gold primary color */
-  header,
-  header a,
-  header h1,
-  header h2,
-  header p,
-  header span,
-  header nav,
-  header .material-symbols-outlined {
-    color: var(--color-primary) !important;
-  }
-
+  /* Header text color is now managed via Tailwind classes in Header.jsx */
   /* Logo highlight on hover: scale + gold glow so users notice the logo */
   header a.group img {
     transition: transform .22s ease, filter .22s ease, opacity .22s ease;
@@ -66,7 +55,6 @@ body {
   }
 
   header a.group:hover h2 {
-    color: var(--color-primary) !important;
     text-shadow: 0 1px 0 rgba(255,255,255,0.25);
   }
 }

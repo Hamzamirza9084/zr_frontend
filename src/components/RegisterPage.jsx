@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css'; // Import Toastify CSS
+import Loader from './Loader'; // Import the Loader component
 
 const RegisterPage = () => {
   const navigate = useNavigate();
@@ -16,10 +17,11 @@ const RegisterPage = () => {
     confirmPassword: ''
   });
 
-  // New: State for validation errors
+  // State for validation errors and UI controls
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // New: Loading state
 
   // 2. Function to handle typing in inputs
   const handleChange = (e) => {
@@ -30,7 +32,7 @@ const RegisterPage = () => {
     }
   };
 
-  // New: Validation Logic
+  // Validation Logic
   const validateForm = () => {
     let newErrors = {};
     let isValid = true;
@@ -97,6 +99,8 @@ const RegisterPage = () => {
         return;
     }
 
+    setIsLoading(true); // Start loading
+
     try {
       // Backend expects: name, email, phone, password
       const response = await axios.post('/api/auth/register', {
@@ -118,11 +122,16 @@ const RegisterPage = () => {
             progress: undefined,
             theme: "colored",
             // Navigate after the toast closes
-            onClose: () => navigate('/login') 
+            onClose: () => {
+              setIsLoading(false); // Stop loading when redirecting
+              navigate('/login');
+            }
         });
       }
     } catch (error) {
       console.error(error);
+      setIsLoading(false); // Stop loading on error
+      
       // Error Toast
       const errMsg = error.response?.data?.message || "Registration failed";
       toast.error(errMsg, {
@@ -148,6 +157,9 @@ const RegisterPage = () => {
       {/* Toast Container Configuration */}
       <ToastContainer />
 
+      {/* RENDER THE FULL SCREEN LOADER HERE */}
+      {isLoading && <Loader />}
+
       <main className="w-full min-h-screen flex flex-col lg:flex-row">
         {/* Left Section: Branding & Features */}
         <section className="hidden lg:flex w-1/2 bg-deep-green p-12 lg:p-20 flex-col justify-between relative overflow-hidden sticky top-0 h-screen">
@@ -166,23 +178,6 @@ const RegisterPage = () => {
               <h2 className="text-5xl font-extrabold text-off-white leading-tight">
                 Find your university faster and get <span className="text-primary">accepted</span> there.
               </h2>
-              {/* <div className="space-y-8">
-                {[
-                  { icon: 'assignment_turned_in', title: 'Free Diagnostic Test', desc: 'Identify your strengths and weaknesses with our comprehensive assessment.' },
-                  { icon: 'groups', title: 'Expert Community', desc: 'Join 50,000+ students and certified trainers in active learning groups.' },
-                  { icon: 'verified_user', title: 'Proven Strategies', desc: 'Access materials that helped 92% of students reach Band 7.5+.' }
-                ].map((item, idx) => (
-                  <div key={idx} className="flex gap-5 items-start">
-                    <div className="size-12 shrink-0 rounded-full bg-light-green/20 flex items-center justify-center border border-light-green/30">
-                      <span className="material-symbols-outlined text-light-green">{item.icon}</span>
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-light-green mb-1">{item.title}</h3>
-                      <p className="text-off-white/70 leading-relaxed">{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div> */}
             </div>
           </div>
           <div className="relative z-10 pt-12">
@@ -312,8 +307,12 @@ const RegisterPage = () => {
               </div>
 
               <div className="md:col-span-2">
-                <button type="submit" className="w-full h-14 bg-primary text-deep-green font-bold text-lg rounded-xl shadow-[0px_4px_0px_0px_#347928] hover:translate-y-[2px] hover:shadow-[0px_2px_0px_0px_#347928] active:translate-y-[4px] active:shadow-none transition-all mt-4">
-                  Create Account
+                <button 
+                  type="submit" 
+                  disabled={isLoading}
+                  className="w-full h-14 bg-primary text-deep-green font-bold text-lg rounded-xl shadow-[0px_4px_0px_0px_#347928] hover:translate-y-[2px] hover:shadow-[0px_2px_0px_0px_#347928] active:translate-y-[4px] active:shadow-none transition-all mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? 'Processing...' : 'Create Account'}
                 </button>
               </div>
             </form>

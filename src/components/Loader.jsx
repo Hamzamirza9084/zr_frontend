@@ -15,6 +15,18 @@ const Loader = () => {
 }
 
 const StyledWrapper = styled.div`
+  /* FULL SCREEN OVERLAY STYLES */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #ffffff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+
   .loader {
     width: fit-content;
     height: fit-content;
@@ -56,6 +68,7 @@ const StyledWrapper = styled.div`
     100% {
       transform: rotateZ(-180deg);
     }
-  }`;
+  }
+`;
 
 export default Loader;
