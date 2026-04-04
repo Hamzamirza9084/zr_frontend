@@ -11,6 +11,7 @@ import AdminStudentList from './components/AdminStudentList';
 import AdminStudentDetails from './components/AdminStudentDetails';
 import AdminApplications from './components/AdminApplications';
 import AdminUniversitiesList from './components/AdminUniversitiesList';
+import AdminManageGlobal from './components/AdminManageGlobal';
 import MyApplications from './components/MyApplications';
 import ProfileUpdate from './components/ProfileUpdate';
 
@@ -62,6 +63,7 @@ function App() {
         <Route path="/admin/students" element={<AdminStudentList />} />
         <Route path="/admin/students/:id" element={<AdminStudentDetails />} />
         <Route path="/admin/applications" element={<AdminApplications />} />
+        <Route path="/admin/global" element={<AdminManageGlobal />} />
       </Routes>
     </Router>
   );

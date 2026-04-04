@@ -5,6 +5,26 @@ import { useNavigate, Link, useParams } from 'react-router-dom';
 
 // --- Utility Functions ---
 
+// Get local currency
+const getCurrencySymbol = (country) => {
+  if (!country) return '$';
+  const c = country.toLowerCase();
+  // Europe & UK
+  if (c.includes('united kingdom') || c.includes('uk')) return '£';
+  if (c.includes('europe') || c.includes('ireland') || c.includes('germany') || c.includes('france') || c.includes('italy') || c.includes('netherlands')) return '€';
+  // Asia
+  if (c.includes('india')) return '₹';
+  if (c.includes('japan')) return '¥';
+  if (c.includes('singapore')) return 'S$';
+  // Oceania & Americas
+  if (c.includes('australia')) return 'A$';
+  if (c.includes('canada')) return 'C$';
+  if (c.includes('new zealand')) return 'NZ$';
+  
+  // Default (USA, etc.)
+  return '$';
+};
+
 // Generate intake options for 2 years from current date
 const generateIntakeOptions = () => {
   const intakes = [];
@@ -38,19 +58,27 @@ const StyledInput = ({ label, type = "text", placeholder, className, ...props })
   </div>
 );
 
-const StyledSelect = ({ label, options, ...props }) => (
-  <div className="flex flex-col gap-1.5">
+const StyledSelect = ({ label, options, className = "", ...props }) => (
+  <div className={`flex flex-col gap-1.5 ${className}`}>
     {label && <label className="text-xs font-bold text-deep-green/80 ml-1 uppercase tracking-wide">{label}</label>}
     <div className="relative">
       <select
-        className="w-full px-4 py-2.5 rounded-xl border-2 border-light-green bg-white text-deep-green focus:outline-none focus:border-deep-green focus:ring-0 transition-colors text-sm font-medium appearance-none cursor-pointer"
+        className="w-full px-4 py-2.5 rounded-xl border-2 border-light-green bg-white text-black focus:outline-none focus:border-deep-green focus:ring-0 transition-colors text-sm font-medium appearance-none cursor-pointer pr-10"
+        style={{
+          backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230f4c3a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'right 1rem center',
+          backgroundSize: '1.2em'
+        }}
         {...props}
       >
-        {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+        {options.map((opt, i) => {
+          if (typeof opt === 'object' && opt !== null) {
+            return <option key={i} value={opt.value} className="text-black">{opt.label}</option>;
+          }
+          return <option key={i} value={opt} className="text-black">{opt}</option>;
+        })}
       </select>
-      <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-deep-green pointer-events-none text-[20px]">
-        expand_more
-      </span>
     </div>
   </div>
 );
@@ -64,13 +92,16 @@ const AdminAddUniversity = () => {
 
   // Comprehensive Form State
   const [formData, setFormData] = useState({
-    // University Info
+    // Institution Reference (Normalized)
+    institutionId: "",
+    // Fallbacks (Legacy flat fields, useful for inline creation)
     name: "",
     country: "",
     city: "",
     ranking: "",
     website: "",
     logo: "",
+    mapLocation: "",
 
     // Admission Rules
     minCgpa: "",
@@ -105,22 +136,25 @@ const AdminAddUniversity = () => {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [showNewCountryInput, setShowNewCountryInput] = useState(false);
 
-  // Global Destinations from DB
-  const [destinations, setDestinations] = useState(["United States of America", "Canada", "United Kingdom", "Australia", "Ireland", "Germany"]);
+  // Global Entities
+  const [destinations, setDestinations] = useState([]);
+  const [institutions, setInstitutions] = useState([]);
+  const [showNewInstitutionInput, setShowNewInstitutionInput] = useState(false);
 
-  // Fetch Global Destinations
   useEffect(() => {
-    const fetchDestinations = async () => {
+    const fetchGlobalData = async () => {
       try {
-        const { data } = await axios.get('/api/destinations');
-        if (data && data.length > 0) {
-          setDestinations(data.map(d => d.name));
-        }
+        const [destRes, instRes] = await Promise.all([
+            axios.get('/api/destinations'),
+            axios.get('/api/institutions')
+        ]);
+        if (destRes.data) setDestinations(destRes.data);
+        if (instRes.data) setInstitutions(instRes.data);
       } catch (err) {
-        console.error("Failed to fetch destinations:", err);
+        console.error("Failed to fetch global lists:", err);
       }
     };
-    fetchDestinations();
+    fetchGlobalData();
   }, []);
 
   // CSV Upload State
@@ -159,6 +193,9 @@ const AdminAddUniversity = () => {
           const { data } = await axios.get(`/api/universities/${id}`);
           setFormData({
             ...data,
+            // Normalize populated fields so `<select>` works with raw string IDs
+            institutionId: data.institutionId?._id || data.institutionId || "",
+            country: data.institutionId?.destinationId?.name || data.country || "",
             // Ensure fields are not undefined to prevent controlled/uncontrolled warnings
             tags: data.tags || [],
             intakes: data.intakes || [],
@@ -180,10 +217,10 @@ const AdminAddUniversity = () => {
       fetchUniversity();
     }
   }, [id, isEditMode, navigate]);
-  // Handle setting showNewCountryInput when destinations or form data change
+  // Edit Mode Pre-population handler
   useEffect(() => {
     if (isEditMode && formData.country && destinations.length > 0) {
-      if (!destinations.includes(formData.country)) {
+      if (!destinations.some(d => d.name === formData.country)) {
         setShowNewCountryInput(true);
       }
     }
@@ -465,26 +502,59 @@ const AdminAddUniversity = () => {
         },
       };
 
+      let destinationIdToUse = null;
+
       // Add Destination if Custom
       if (showNewCountryInput && formData.country.trim()) {
         try {
-          await axios.post('/api/destinations', { name: formData.country.trim() }, config);
-          // Optimistically add to state
-          setDestinations(prev => [...new Set([...prev, formData.country.trim()])]);
+          const destRes = await axios.post('/api/destinations', { name: formData.country.trim() }, config);
+          destinationIdToUse = destRes.data._id;
+          setDestinations(prev => [...new Set([...prev, destRes.data])]);
         } catch (err) {
           console.error("Could not append destination to database (may already exist):", err);
+          // Fallback to finding it if it already existed
+          destinationIdToUse = destinations.find(d => d.name === formData.country.trim())?._id;
+        }
+      } else {
+        destinationIdToUse = destinations.find(d => d.name === formData.country)?._id;
+      }
+
+      let institutionIdToUse = formData.institutionId;
+
+      // Add Institution if Custom
+      if (showNewInstitutionInput && formData.name.trim() && destinationIdToUse) {
+        try {
+          const instRes = await axios.post('/api/institutions', {
+             name: formData.name.trim(),
+             destinationId: destinationIdToUse,
+             city: formData.city,
+             ranking: formData.ranking,
+             website: formData.website,
+             logo: formData.logo,
+             mapLocation: formData.mapLocation
+          }, config);
+          institutionIdToUse = instRes.data._id;
+          setInstitutions(prev => [...prev, instRes.data]);
+        } catch (err) {
+          console.error("Could not append institution:", err);
+          throw new Error("Institution creation failed.");
         }
       }
 
+      const finalPayload = {
+         ...formData,
+         institutionId: institutionIdToUse
+      };
+
       if (isEditMode) {
         // Edit mode: PUT to specific ID
-        const response = await axios.put(`/api/universities/${id}`, formData, config);
+        const response = await axios.put(`/api/universities/${id}`, finalPayload, config);
         console.log("Updated Response:", response.data);
         alert("University Updated Successfully!");
         navigate('/admin/universities'); // Redirect to list after edit
       } else {
         // Add mode: POST to root
-        const response = await axios.post('/api/universities', formData, config);
+        const response = await axios.post('/api/universities', finalPayload, config);
         console.log("Response:", response.data);
         alert("University Added Successfully!");
         resetForm();
@@ -498,7 +568,7 @@ const AdminAddUniversity = () => {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-screen bg-off-white overflow-hidden font-display">
+    <div className="flex flex-col lg:flex-row h-screen bg-deep-green overflow-hidden font-display">
 
       {/* LEFT: Entry Form Area */}
       <div className="w-full lg:w-3/5 overflow-y-auto p-8 custom-scrollbar">
@@ -507,14 +577,14 @@ const AdminAddUniversity = () => {
           {/* Page Header */}
           <div className="flex justify-between items-start">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-deep-green/10 border border-deep-green/20 w-fit mb-4">
-                <span className="material-symbols-outlined text-[18px] text-deep-green">admin_panel_settings</span>
-                <span className="text-xs font-bold uppercase tracking-wide text-deep-green">Admin Portal</span>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 w-fit mb-4">
+                <span className="material-symbols-outlined text-[18px] text-white">admin_panel_settings</span>
+                <span className="text-xs font-bold uppercase tracking-wide text-white">Admin Portal</span>
               </div>
-              <h1 className="text-2xl font-extrabold text-deep-green tracking-tight">
+              <h1 className="text-2xl font-extrabold text-white tracking-tight">
                 {isEditMode ? 'Edit Program' : 'Post New Program'}
               </h1>
-              <p className="text-deep-green/60 text-sm font-bold mt-1">
+              <p className="text-white/60 text-sm font-bold mt-1">
                 {isEditMode ? 'Update the details for this program.' : 'Fill in the details below to add a new program to the system.'}
               </p>
             </div>
@@ -557,16 +627,17 @@ const AdminAddUniversity = () => {
 
         <form className="space-y-6" onSubmit={handleSubmit}>
 
-          {/* 1. University Information */}
+          {/* 1. Institution Information (Normalized Flow) */}
           <section className="bg-white p-6 rounded-2xl border-2 border-light-green/50 shadow-sm">
             <h3 className="flex items-center gap-2 text-lg font-bold text-deep-green mb-6 border-b border-light-green/30 pb-2">
               <span className="material-symbols-outlined">account_balance</span>
-              University Information
+              Institution & Destination
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <StyledInput label="University Name" name="name" value={formData.name} onChange={handleChange} placeholder="e.g. University of Westminster" className="md:col-span-2" />
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+              {/* Destination Selection */}
               {showNewCountryInput ? (
-                <div className="flex items-end gap-2">
+                <div className="flex items-end gap-2 md:col-span-2">
                   <StyledInput
                     label="Custom Destination"
                     name="country"
@@ -592,29 +663,87 @@ const AdminAddUniversity = () => {
                   name="country"
                   value={formData.country || ""}
                   onChange={(e) => {
-                    if (e.target.value === "Add New Destination...") {
+                    const val = e.target.value;
+                    if (val === "Add New Destination...") {
                       setShowNewCountryInput(true);
-                      setFormData(prev => ({ ...prev, country: "" }));
+                      setShowNewInstitutionInput(true); // Must add new institution if dest is new
+                      setFormData(prev => ({ ...prev, country: "", institutionId: "", name: "" }));
                     } else {
-                      handleChange(e);
+                      setFormData(prev => ({ ...prev, country: val, institutionId: "" }));
+                      setShowNewInstitutionInput(false);
                     }
                   }}
-                  options={["", ...destinations, "Add New Destination..."]}
+                  options={["", ...destinations.map(d => d.name), "Add New Destination..."]}
+                  className="md:col-span-2"
                 />
               )}
-              <StyledInput label="City" name="city" value={formData.city} onChange={handleChange} placeholder="e.g. London" />
-              <StyledInput label="Global Ranking (Optional)" name="ranking" value={formData.ranking} onChange={handleChange} type="number" placeholder="e.g. 102" />
-              <StyledInput label="Website URL" name="website" value={formData.website} onChange={handleChange} placeholder="https://..." />
-              
-              <div className="md:col-span-2">
-                <label className="block text-sm font-bold text-deep-green mb-2">University Logo</label>
-                <div className="flex items-center gap-3">
-                  <input type="file" accept="image/*" onChange={handleLogoUpload} className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-primary/20 file:text-primary hover:file:bg-primary/30 appearance-none outline-none border-2 border-deep-green/10 rounded-xl px-2 py-1 w-full bg-white transition-colors" disabled={uploadingLogo} />
-                  {uploadingLogo && <span className="text-xs text-primary font-bold animate-pulse whitespace-nowrap bg-primary/10 px-3 py-2 rounded-xl">Uploading...</span>}
-                  {formData.logo && !uploadingLogo && <img src={formData.logo} alt="Logo" className="h-12 w-12 object-contain rounded-xl border-2 border-deep-green/10 bg-white shadow-sm" />}
+            </div>
+
+            {/* Institution Selection */}
+            {formData.country && !showNewInstitutionInput && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5 border-t border-light-green/20 pt-4">
+                <StyledSelect
+                  label="Institution"
+                  name="institutionId"
+                  value={formData.institutionId || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "Add New Institution...") {
+                      setShowNewInstitutionInput(true);
+                      setFormData(prev => ({ ...prev, institutionId: "", name: "", city: "", ranking: "", website: "", logo: "", mapLocation: "" }));
+                    } else {
+                      setFormData(prev => ({ ...prev, institutionId: val, name: "" }));
+                    }
+                  }}
+                  className="md:col-span-2"
+                  options={[
+                    { value: "", label: "Select an Institution..." },
+                    ...institutions
+                      .filter(i => {
+                        const destIdOfInst = i.destinationId?._id || i.destinationId;
+                        const destIdOfInput = destinations.find(d => d.name === formData.country)?._id;
+                        return destIdOfInst === destIdOfInput || i.destinationId?.name === formData.country;
+                      })
+                      .map(i => ({ value: i._id, label: i.name })),
+                    { value: "Add New Institution...", label: "+ Add New Institution..." }
+                  ]}
+                />
+              </div>
+            )}
+
+            {/* Inline Add Institution Form */}
+            {showNewInstitutionInput && formData.country && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 border-t border-light-green/20 pt-4">
+                <div className="md:col-span-2 flex items-center justify-between">
+                   <h4 className="text-sm font-bold text-primary">Adding New Institution to {formData.country}</h4>
+                   {!showNewCountryInput && (
+                     <button type="button" onClick={() => setShowNewInstitutionInput(false)} className="text-xs font-bold text-red-500 hover:text-red-700">Cancel</button>
+                   )}
+                </div>
+                <StyledInput label="Institution Name" name="name" value={formData.name} onChange={handleChange} placeholder="e.g. University of Westminster" className="md:col-span-2" />
+                <StyledInput label="City" name="city" value={formData.city} onChange={handleChange} placeholder="e.g. London" />
+                <StyledInput label="Global Ranking (Optional)" name="ranking" value={formData.ranking} onChange={handleChange} type="number" placeholder="e.g. 102" />
+                <StyledInput label="Website URL" name="website" value={formData.website} onChange={handleChange} placeholder="https://..." />
+                <StyledInput label="Map Location (Google Embed URL)" name="mapLocation" value={formData.mapLocation || ""} onChange={handleChange} placeholder="https://www.google.com/maps/embed?..." />
+                
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-deep-green/80 uppercase tracking-wide mb-2">Institution Logo</label>
+                  <div className="flex items-center gap-3">
+                    <input type="file" accept="image/*" onChange={handleLogoUpload} className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-primary/20 file:text-primary hover:file:bg-primary/30 appearance-none outline-none border-2 border-deep-green/10 rounded-xl px-2 py-1 w-full bg-white transition-colors" disabled={uploadingLogo} />
+                    {uploadingLogo && <span className="text-xs text-primary font-bold animate-pulse whitespace-nowrap bg-primary/10 px-3 py-2 rounded-xl">Uploading...</span>}
+                    {formData.logo && !uploadingLogo && <img src={formData.logo} alt="Logo" className="h-12 w-12 object-contain rounded-xl border-2 border-deep-green/10 bg-white shadow-sm" />}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+            
+            {/* Legacy Warning / Info */}
+            {isEditMode && !formData.institutionId && formData.name && !showNewInstitutionInput && (
+              <div className="md:col-span-2 mt-4 p-3 bg-primary/10 border border-primary/30 rounded-xl">
+                <p className="text-xs font-bold text-deep-green">Legacy Program detected: {formData.name}</p>
+                <p className="text-[10px] text-deep-green/60">Select an Institution above to migrate this program to the new structure.</p>
+              </div>
+            )}
           </section>
 
           {/* 2. Course Details */}
@@ -920,7 +1049,7 @@ const AdminAddUniversity = () => {
             </div>
             <div>
               <p className="text-[10px] text-deep-green/40 font-black uppercase tracking-wider mb-1 mt-2">Tuition</p>
-              <p className="text-deep-green font-bold text-sm">{formData.tuitionFee ? `$${formData.tuitionFee}` : "$0"}</p>
+              <p className="text-deep-green font-bold text-sm">{formData.tuitionFee ? `${getCurrencySymbol(formData.country)}${Number(formData.tuitionFee).toLocaleString('en-IN')}` : "$0"}</p>
             </div>
             <div className="col-span-2 pt-2 border-t border-deep-green/10 mt-1">
               <p className="text-[10px] text-deep-green/40 font-black uppercase tracking-wider mb-1">Intakes</p>

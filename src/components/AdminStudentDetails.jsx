@@ -41,7 +41,7 @@ const AdminStudentDetails = () => {
   if (!student) return <div className="text-center mt-10">Student not found</div>;
 
   return (
-    <div className="min-h-screen bg-off-white font-display p-8">
+    <div className="min-h-screen bg-deep-green font-display p-8">
       <div className="max-w-5xl mx-auto bg-white shadow-xl shadow-deep-green/5 rounded-2xl p-8 border border-deep-green/10">
         <Link to="/admin/students" className="text-deep-green/60 hover:text-deep-green font-bold mb-6 inline-flex items-center gap-2 transition-colors">
           <span className="material-symbols-outlined text-[20px]">arrow_back</span>

@@ -39,17 +39,17 @@ const AdminStudentList = () => {
   if (error) return <div className="text-center mt-10 text-red-500 font-bold">{error}</div>;
 
   return (
-    <div className="min-h-screen bg-off-white font-display p-8">
+    <div className="min-h-screen bg-deep-green font-display p-8">
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-deep-green/10 border border-deep-green/20 w-fit mb-4">
-              <span className="material-symbols-outlined text-[18px] text-deep-green">admin_panel_settings</span>
-              <span className="text-xs font-bold uppercase tracking-wide text-deep-green">Admin Portal</span>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 w-fit mb-4">
+              <span className="material-symbols-outlined text-[18px] text-white">admin_panel_settings</span>
+              <span className="text-xs font-bold uppercase tracking-wide text-white">Admin Portal</span>
             </div>
-            <h1 className="text-3xl font-extrabold text-deep-green">Student List</h1>
+            <h1 className="text-3xl font-extrabold text-white">Student List</h1>
           </div>
-          <Link to="/admin" className="px-5 py-2.5 rounded-xl bg-deep-green text-white font-bold hover:bg-opacity-90 transition-colors flex items-center gap-2 shadow-lg shadow-deep-green/20">
+          <Link to="/admin" className="px-5 py-2.5 rounded-xl bg-white text-deep-green font-bold hover:bg-light-green/20 transition-colors flex items-center gap-2 shadow-lg shadow-deep-green/20">
             <span className="material-symbols-outlined">add_circle</span>
             Add University
           </Link>

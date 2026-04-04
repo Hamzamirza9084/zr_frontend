@@ -5,6 +5,26 @@ import axios from 'axios';
 
 // --- Utility Functions ---
 
+// Get local currency
+export const getCurrencySymbol = (country) => {
+  if (!country) return '$';
+  const c = country.toLowerCase();
+  // Europe & UK
+  if (c.includes('united kingdom') || c.includes('uk')) return '£';
+  if (c.includes('europe') || c.includes('ireland') || c.includes('germany') || c.includes('france') || c.includes('italy') || c.includes('netherlands')) return '€';
+  // Asia
+  if (c.includes('india')) return '₹';
+  if (c.includes('japan')) return '¥';
+  if (c.includes('singapore')) return 'S$';
+  // Oceania & Americas
+  if (c.includes('australia')) return 'A$';
+  if (c.includes('canada')) return 'C$';
+  if (c.includes('new zealand')) return 'NZ$';
+  
+  // Default (USA, etc.)
+  return '$';
+};
+
 // Generate intake options for 2 years from current date
 const generateIntakeOptions = () => {
   const intakes = [];
@@ -580,14 +600,18 @@ const CollegeSearch = () => {
     // 1. Destination (Country)
     if (formData.destination && formData.destination !== "All Destinations") {
       results = results.filter(uni => {
-        const match = uni.country?.toLowerCase().trim() === formData.destination.toLowerCase().trim();
+        const uniCountry = uni.institutionId?.destinationId?.name || uni.country || "";
+        const match = uniCountry.toLowerCase().trim() === formData.destination.toLowerCase().trim();
         return match;
       });
     }
 
     // 2. Institution Name
     if (formData.institution) {
-      results = results.filter(uni => uni.name?.toLowerCase().includes(formData.institution.toLowerCase().trim()));
+      results = results.filter(uni => {
+        const instName = uni.institutionId?.name || uni.name || '';
+        return instName.toLowerCase().includes(formData.institution.toLowerCase().trim());
+      });
     }
 
     // 3. Program Level
@@ -776,14 +800,18 @@ const CollegeSearch = () => {
                   handleChange={handleChange}
                   setFormData={setFormData}
                   handleEvaluate={handleEvaluate}
-                  destinations={[...new Set(colleges.map(c => c.country).filter(Boolean))].sort()}
+                  destinations={[...new Set(colleges.map(c => c.institutionId?.destinationId?.name || c.country).filter(Boolean))].sort()}
                   programLevels={PROGRAM_LEVELS}
                   fieldOfStudies={FIELD_OF_STUDIES}
                   // Same dynamic filtering for mobile
                   institutions={[...new Set(
                     colleges
-                      .filter(c => formData.destination === "All Destinations" || !formData.destination || c.country?.toLowerCase().trim() === formData.destination.toLowerCase().trim())
-                      .map(c => c.name)
+                      .filter(c => {
+                        const country = c.institutionId?.destinationId?.name || c.country || "";
+                        return formData.destination === "All Destinations" || !formData.destination || country.toLowerCase().trim() === formData.destination.toLowerCase().trim();
+                      })
+                      .map(c => c.institutionId?.name || c.name || "")
+                      .filter(name => name.trim() !== "")
                   )].sort()}
                 />
               </div>
@@ -805,16 +833,16 @@ const CollegeSearch = () => {
 
 
       {/* Sidebar - Desktop (Hidden on mobile via 'hidden lg:flex') */}
-      <aside className="w-[420px] border-r border-deep-green/10 bg-off-white overflow-y-auto custom-scrollbar hidden lg:flex flex-col z-10">
+      <aside className="w-[420px] border-r border-white/10 bg-[#0f4c3a] overflow-y-auto custom-scrollbar hidden lg:flex flex-col z-10">
         <div className="p-6 pb-24 space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-extrabold text-deep-green tracking-tight">Profile Match</h1>
-              <p className="text-deep-green/60 text-xs font-medium mt-1">Refine criteria to find your fit</p>
+              <h1 className="text-2xl font-extrabold text-white tracking-tight">Profile Match</h1>
+              <p className="text-white/60 text-xs font-medium mt-1">Refine criteria to find your fit</p>
             </div>
             <button
               onClick={handleReset}
-              className="size-10 rounded-full hover:bg-light-green/30 flex items-center justify-center transition-colors text-deep-green"
+              className="size-10 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors text-white"
               title="Reset Filters"
             >
               <span className="material-symbols-outlined">restart_alt</span>
@@ -827,19 +855,23 @@ const CollegeSearch = () => {
             handleChange={handleChange}
             setFormData={setFormData}
             handleEvaluate={handleEvaluate}
-            destinations={[...new Set(colleges.map(c => c.country).filter(Boolean))].sort()}
+            destinations={[...new Set(colleges.map(c => c.institutionId?.destinationId?.name || c.country).filter(Boolean))].sort()}
             programLevels={PROGRAM_LEVELS}
             fieldOfStudies={FIELD_OF_STUDIES}
             // Dynamically filter institutions based on selected Destination
             institutions={[...new Set(
               colleges
-                .filter(c => formData.destination === "All Destinations" || !formData.destination || c.country?.toLowerCase().trim() === formData.destination.toLowerCase().trim())
-                .map(c => c.name)
+                .filter(c => {
+                  const country = c.institutionId?.destinationId?.name || c.country || "";
+                  return formData.destination === "All Destinations" || !formData.destination || country.toLowerCase().trim() === formData.destination.toLowerCase().trim();
+                })
+                .map(c => c.institutionId?.name || c.name || "")
+                .filter(name => name.trim() !== "")
             )].sort()}
           />
         </div>
 
-        <div className="sticky bottom-0 bg-off-white p-6 border-t border-deep-green/10 backdrop-blur-xl bg-opacity-90">
+        <div className="sticky bottom-0 bg-[#0f4c3a] p-6 border-t border-white/10 backdrop-blur-xl">
           <button
             onClick={handleEvaluate}
             className="w-full h-14 bg-primary text-deep-green text-base font-extrabold rounded-xl border border-deep-green shadow-[4px_4px_0px_0px_rgba(52,121,40,1)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(52,121,40,1)] active:translate-y-[4px] active:shadow-none transition-all flex items-center justify-center gap-2"
@@ -851,34 +883,34 @@ const CollegeSearch = () => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-6 md:p-12 relative">
+      <main className="flex-1 overflow-y-auto p-6 md:p-12 relative bg-[#0f4c3a] custom-scrollbar">
         <div className="max-w-6xl mx-auto">
 
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6">
             <div className="flex-1">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-light-green/30 border border-light-green w-fit mb-3">
-                <span className="size-2 rounded-full bg-deep-green animate-pulse"></span>
-                <span className="text-xs font-bold uppercase tracking-wide text-deep-green">Live Results</span>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm w-fit mb-3">
+                <span className="size-2 rounded-full bg-emerald-300 animate-pulse"></span>
+                <span className="text-xs font-bold uppercase tracking-wide text-white/90">Live Results</span>
               </div>
-              <h2 className="text-3xl md:text-4xl font-extrabold text-deep-green tracking-tight">University Matches</h2>
-              <p className="text-deep-green/70 mt-2 font-medium">Found <span className="text-deep-green font-black underline decoration-primary decoration-4 underline-offset-2">{filteredColleges.length}</span> programs based on your profile.</p>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">University Matches</h2>
+              <p className="text-white/70 mt-2 font-medium">Found <span className="text-white font-black underline decoration-white decoration-4 underline-offset-2">{filteredColleges.length}</span> programs based on your profile.</p>
             </div>
 
             <div className="flex flex-wrap gap-3">
               {/* Show Saved Toggle */}
               <button
                 onClick={() => setShowSavedOnly(!showSavedOnly)}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border-2 transition-all shadow-sm font-bold ${showSavedOnly ? 'border-pink-500 bg-pink-50 text-pink-600' : 'border-deep-green/10 bg-white text-deep-green hover:bg-light-green/20'}`}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border-2 transition-all shadow-sm font-bold ${showSavedOnly ? 'border-pink-400 bg-pink-500/20 text-pink-200' : 'border-white/30 bg-white/5 text-white hover:bg-white/10 hover:border-white/50'}`}
               >
-                <span className={`material-symbols-outlined text-[20px] ${showSavedOnly ? 'text-pink-500' : ''}`}>favorite</span>
+                <span className={`material-symbols-outlined text-[20px] ${showSavedOnly ? 'text-pink-400' : 'text-white/80'}`}>favorite</span>
                 {showSavedOnly ? 'Showing Saved' : 'Show Saved'}
               </button>
 
               {/* NEW MOBILE FILTER BUTTON */}
               <button
                 onClick={() => setShowMobileFilters(true)}
-                className="lg:hidden flex items-center gap-2 px-5 py-2.5 rounded-xl border-2 border-deep-green/10 bg-white text-deep-green font-bold hover:bg-light-green/20 transition-all shadow-sm"
+                className="lg:hidden flex items-center gap-2 px-5 py-2.5 rounded-xl border-2 border-white/30 bg-white/5 text-white font-bold hover:bg-white/10 transition-all shadow-sm"
               >
                 <span className="material-symbols-outlined text-[20px]">filter_list</span>
                 Filters
@@ -888,7 +920,7 @@ const CollegeSearch = () => {
 
           {/* Error Message */}
           {error && (
-            <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 font-bold border border-red-200">
+            <div className="bg-red-500/20 text-red-200 p-4 rounded-xl mb-6 font-bold border border-red-400/30 backdrop-blur-sm">
               {error}
             </div>
           )}
@@ -896,7 +928,7 @@ const CollegeSearch = () => {
           {/* Loading State */}
           {loading ? (
             <div className="flex items-center justify-center py-20">
-              <span className="material-symbols-outlined text-4xl text-deep-green animate-spin">refresh</span>
+              <span className="material-symbols-outlined text-4xl text-white/70 animate-spin">refresh</span>
             </div>
           ) : (
             /* Grid */
@@ -920,33 +952,33 @@ const CollegeSearch = () => {
                     hidden: { opacity: 0, y: 20 },
                     show: { opacity: 1, y: 0 }
                   }}
-                  className="bg-[#00674F] rounded-2xl border border-black/20 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col h-full"
+                  className="bg-white rounded-2xl border border-gray-100 shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col h-full"
                 >
                   {/* Header Section */}
-                  <div className="p-6 pb-4 flex justify-between items-start gap-4 border-b border-white/10">
+                  <div className="p-6 pb-4 flex justify-between items-start gap-4 bg-[#00674F] rounded-t-2xl">
                     <div className="flex gap-4 flex-1">
                       {/* University Icon / Logo */}
-                      <div className="size-12 rounded-lg bg-white border border-white/10 flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm">
-                        {college.logo ? (
-                          <img src={college.logo} alt={`${college.name} Logo`} className="w-full h-full object-contain p-1" />
+                      <div className="size-12 rounded-lg bg-white border border-white/20 flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm">
+                        {college.institutionId?.logo || college.logo ? (
+                          <img src={college.institutionId?.logo || college.logo} alt={`${college.institutionId?.name || college.name} Logo`} className="w-full h-full object-contain p-1" />
                         ) : (
-                          <span className="material-symbols-outlined text-[#00674F] text-2xl">apartment</span>
+                          <span className="material-symbols-outlined text-[#0f4c3a] text-2xl">apartment</span>
                         )}
                       </div>
                       {/* University Info */}
                       <div className="flex-1">
-                        <h4 className="text-sm font-bold text-white">{college.name || "Unknown University"}</h4>
-                        <p className="text-xs text-white/80">{college.city || ""}{college.city && college.country ? ", " : ""}{college.country || ""}</p>
+                        <h4 className="text-sm font-bold text-white">{college.institutionId?.name || college.name || "Unknown University"}</h4>
+                        <p className="text-xs text-white/70">{(college.institutionId?.city || college.city || "")}{((college.institutionId?.city || college.city) && (college.institutionId?.destinationId?.name || college.country)) ? ", " : ""}{(college.institutionId?.destinationId?.name || college.country || "")}</p>
                       </div>
                     </div>
                   </div>
 
                   {/* Course Info */}
                   <div className="px-6 pt-4 pb-3">
-                    <p className="text-[10px] font-bold text-white/60 uppercase tracking-wider mb-1">{college.courseLevel || "Program Level"}</p>
-                    <h3 className="text-lg font-extrabold text-white uppercase leading-tight">{college.courseName || "Unknown Course"}</h3>
+                    <p className="text-[10px] font-bold text-[#0f4c3a]/50 uppercase tracking-wider mb-1">{college.courseLevel || "Program Level"}</p>
+                    <h3 className="text-lg font-extrabold text-gray-900 uppercase leading-tight">{college.courseName || "Unknown Course"}</h3>
                     {college.courseLink && (
-                      <a href={college.courseLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-white mt-1.5 transition-colors">
+                      <a href={college.courseLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-[#0f4c3a] hover:text-[#0f4c3a]/70 mt-1.5 transition-colors">
                         <span className="material-symbols-outlined text-[14px]">link</span>
                         View Course Details
                       </a>
@@ -957,8 +989,8 @@ const CollegeSearch = () => {
                   {college.tags && college.tags.length > 0 && (
                     <div className="px-6 pb-4 flex flex-wrap gap-2">
                       {college.tags.slice(0, 3).map((tag, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 text-[11px] font-bold text-white/90">
-                          <span className="material-symbols-outlined text-[14px]">
+                        <span key={i} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0f4c3a] bg-[#0f4c3a]/5 px-2.5 py-1 rounded-full border border-[#0f4c3a]/10">
+                          <span className="material-symbols-outlined text-[13px] text-[#0f4c3a]/60">
                             {tag.includes('Scholarship') ? 'school' : tag.includes('Demand') ? 'trending_up' : 'verified'}
                           </span>
                           {tag}
@@ -967,76 +999,76 @@ const CollegeSearch = () => {
                     </div>
                   )}
 
-                  <div className="px-6 border-t border-white/10">
+                  <div className="px-6 border-t border-gray-100">
                     {/* Info Rows */}
                     <div className="py-4 space-y-3">
                       <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-white/60 uppercase">Duration</span>
-                        <span className="text-sm font-bold text-white">
+                        <span className="text-xs font-bold text-gray-400 uppercase">Duration</span>
+                        <span className="text-sm font-bold text-gray-900">
                           {college.duration 
                             ? (/^\d+$/.test(college.duration.toString().trim()) ? `${college.duration} Months` : college.duration)
                             : "N/A"}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center border-t border-white/10 pt-3">
-                        <span className="text-xs font-bold text-white/60 uppercase">App Fee</span>
-                        <span className="text-sm font-bold text-white/90">{college.appFee || 'Free Waiver'}</span>
+                      <div className="flex justify-between items-center border-t border-gray-100 pt-3">
+                        <span className="text-xs font-bold text-gray-400 uppercase">App Fee</span>
+                        <span className="text-sm font-bold text-gray-900">{college.appFee || 'Free Waiver'}</span>
                       </div>
-                      <div className="flex justify-between items-center border-t border-white/10 pt-3">
-                        <span className="text-xs font-bold text-white/60 uppercase">Success Chance</span>
+                      <div className="flex justify-between items-center border-t border-gray-100 pt-3">
+                        <span className="text-xs font-bold text-gray-400 uppercase">Success Chance</span>
                         <div className="flex items-center gap-1.5">
-                          <span className={`w-2 h-2 rounded-full ${(!college.successChance || college.successChance.includes('High')) ? 'bg-green-400' : college.successChance === 'Medium' ? 'bg-yellow-400' : 'bg-red-400'}`}></span>
-                          <span className="text-sm font-bold text-white/90">{college.successChance || 'High'}</span>
+                          <span className={`w-2 h-2 rounded-full ${(!college.successChance || college.successChance.includes('High')) ? 'bg-emerald-500' : college.successChance === 'Medium' ? 'bg-amber-400' : 'bg-red-400'}`}></span>
+                          <span className="text-sm font-bold text-gray-900">{college.successChance || 'High'}</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Requirement & Tuition Box */}
-                  <div className="mx-6 my-4 p-4 bg-white/10 border border-white/20 rounded-xl">
+                  <div className="mx-6 my-4 p-4 bg-gray-50 border border-gray-100 rounded-xl">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-[10px] font-bold text-white/60 uppercase tracking-wider mb-2">English Req</p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">English Req</p>
                         <div className="flex flex-wrap gap-1">
                           {college.englishRequirements && college.englishRequirements.length > 0 ? (
                             college.englishRequirements.slice(0, 2).map((req, i) => (
-                              <span key={i} className="text-xs font-extrabold text-[#00674F] bg-white px-1.5 py-0.5 rounded border border-white/20">
+                              <span key={i} className="text-xs font-extrabold text-[#0f4c3a] bg-white px-2 py-1 rounded-lg border border-[#0f4c3a]/15 shadow-sm">
                                 {req.testName}: {req.minOverall}
                               </span>
                             ))
                           ) : (
-                            <span className="text-sm font-extrabold text-white">N/A</span>
+                            <span className="text-sm font-extrabold text-gray-400">N/A</span>
                           )}
-                          {college.englishRequirements?.length > 2 && <span className="text-[10px] text-white/60 font-bold self-center">+{college.englishRequirements.length - 2}</span>}
+                          {college.englishRequirements?.length > 2 && <span className="text-[10px] text-gray-400 font-bold self-center">+{college.englishRequirements.length - 2}</span>}
                         </div>
                       </div>
                       <div>
-                        <p className="text-[10px] font-bold text-white/60 uppercase tracking-wider mb-2">Tuition (1st yr)</p>
-                        <p className="text-base font-extrabold text-white">{college.tuitionFee ? `$${college.tuitionFee}` : "N/A"}</p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Tuition (1st yr)</p>
+                        <p className="text-base font-extrabold text-gray-900">{college.tuitionFee ? `${getCurrencySymbol(college.institutionId?.destinationId?.name || college.country)}${Number(college.tuitionFee).toLocaleString('en-IN')}` : "N/A"}</p>
                       </div>
                     </div>
                   </div>
 
                   {/* Available Intakes */}
-                  <div className="px-6 py-4 border-t border-white/10">
-                    <p className="text-[10px] font-bold text-white/60 uppercase tracking-wider mb-3">Available Intakes</p>
+                  <div className="px-6 py-4 border-t border-gray-100">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Available Intakes</p>
                     <div className="flex gap-3">
                       {college.intakes ? (
                         typeof college.intakes === 'string' ? (
                           college.intakes.split(',').slice(0, 3).map((intake, i) => (
-                            <span key={i} className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-xs font-bold text-white">
+                            <span key={i} className="px-4 py-2 bg-[#0f4c3a]/5 border border-[#0f4c3a]/10 rounded-lg text-xs font-bold text-[#0f4c3a]">
                               {intake.trim()}
                             </span>
                           ))
                         ) : (
                           Array.isArray(college.intakes) && college.intakes.slice(0, 3).map((intake, i) => (
-                            <span key={i} className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-xs font-bold text-white">
+                            <span key={i} className="px-4 py-2 bg-[#0f4c3a]/5 border border-[#0f4c3a]/10 rounded-lg text-xs font-bold text-[#0f4c3a]">
                               {intake}
                             </span>
                           ))
                         )
                       ) : (
-                        <span className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-xs font-bold text-white/80">
+                        <span className="px-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold text-gray-400">
                           Check availability
                         </span>
                       )}
@@ -1044,20 +1076,17 @@ const CollegeSearch = () => {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="px-6 py-5 flex gap-3 items-center mt-auto">
+                  <div className="px-6 py-5 flex gap-3 items-center mt-auto border-t border-gray-100">
                     <button
                       onClick={() => handleApply(college._id)}
-                      className="flex-1 py-3 text-[#00674F] font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-md"
-                      style={{ backgroundColor: '#cca34a' }}
-                      onMouseEnter={(e) => e.target.style.backgroundColor = '#b8933d'}
-                      onMouseLeave={(e) => e.target.style.backgroundColor = '#cca34a'}
+                      className="flex-1 py-3 bg-primary text-deep-green font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-md hover:brightness-90 active:scale-[0.98]"
                     >
                       Apply Now
                       <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
                     </button>
                     <button
                       onClick={() => toggleSave(college._id)}
-                      className={`transition-colors p-2 ${savedColleges.includes(college._id) ? 'text-pink-500 hover:text-pink-400' : 'text-white/60 hover:text-pink-400'}`}
+                      className={`transition-all duration-200 p-2.5 rounded-xl border ${savedColleges.includes(college._id) ? 'border-pink-200 bg-pink-50 text-pink-500' : 'border-gray-200 bg-gray-50 text-gray-400 hover:text-pink-400 hover:border-pink-200 hover:bg-pink-50'}`}
                     >
                       <span className="material-symbols-outlined text-2xl">
                         {savedColleges.includes(college._id) ? 'favorite' : 'favorite_border'}

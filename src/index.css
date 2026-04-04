@@ -19,7 +19,7 @@ html {
 }
 
 body {
-  @apply bg-background-light text-gray-800 font-body antialiased;
+  @apply bg-[#0f4c3a] text-white font-body antialiased;
 }
 
 /* Scrollbar styling to match the Gold/Green theme */
@@ -31,7 +31,7 @@ body {
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: #CCA34A; /* Gold scrollbar */
+    background-color: #FFFFFF; /* White scrollbar */
     border-radius: 20px;
   }
   

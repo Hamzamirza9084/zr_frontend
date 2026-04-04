@@ -8,9 +8,7 @@ const Footer = () => {
         {/* Branding Section */}
         <div className="flex flex-col gap-6 max-w-md">
           <div className="flex items-center gap-2 text-primary">
-            <div className="size-6 flex items-center justify-center rounded bg-primary text-deep-green">
-              <span className="material-symbols-outlined text-[16px]">school</span>
-            </div>
+            
             <h2 className="text-xl font-bold">Anvora.</h2>
           </div>
           <p className="text-off-white/60 text-sm leading-relaxed">

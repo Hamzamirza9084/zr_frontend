@@ -7,7 +7,17 @@ const AdminUniversitiesList = () => {
     const [universities, setUniversities] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [institutionSearch, setInstitutionSearch] = useState('');
     const navigate = useNavigate();
+
+    const filteredUniversities = universities.filter(uni => {
+        const instName = uni.institutionId?.name || uni.name || '';
+        const matchesGeneral = instName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                               (uni.courseName || '').toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesInstitution = instName.toLowerCase().includes(institutionSearch.toLowerCase());
+        return matchesGeneral && matchesInstitution;
+    });
 
     useEffect(() => {
         const checkAdminAndFetch = async () => {
@@ -64,19 +74,19 @@ const AdminUniversitiesList = () => {
     };
 
     if (loading) return (
-        <div className="flex justify-center items-center h-screen bg-off-white">
-            <span className="material-symbols-outlined text-4xl text-deep-green animate-spin">refresh</span>
+        <div className="flex justify-center items-center h-screen bg-transparent">
+            <span className="material-symbols-outlined text-4xl text-white animate-spin">refresh</span>
         </div>
     );
 
     if (error) return (
-        <div className="flex justify-center items-center h-screen bg-off-white">
+        <div className="flex justify-center items-center h-screen bg-transparent">
             <p className="text-red-500 font-bold">{error}</p>
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-off-white py-12 px-6 font-display">
+        <div className="min-h-screen bg-transparent py-12 px-6 font-display">
             <div className="max-w-7xl mx-auto space-y-8">
 
                 {/* Header */}
@@ -88,12 +98,17 @@ const AdminUniversitiesList = () => {
                             <span className="material-symbols-outlined text-[24px]">account_balance</span>
                         </div>
                         <div>
-                            <h1 className="text-2xl font-extrabold text-deep-green tracking-tight">Manage Universities</h1>
+                            <h1 className="text-2xl font-extrabold text-deep-green tracking-tight">
+                                Manage Universities <span className="text-lg bg-light-green text-deep-green px-2 py-1 rounded-xl ml-2 inline-block -translate-y-0.5">{universities.length} Total</span>
+                            </h1>
                             <p className="text-deep-green/60 text-sm font-bold mt-1">View, edit, or remove programs from the system.</p>
                         </div>
                     </div>
 
-                    <div className="relative z-10 flex gap-3">
+                    <div className="relative z-10 flex gap-3 flex-wrap justify-end">
+                        <Link to="/admin/global" className="px-5 py-2.5 rounded-xl border-2 border-deep-green/10 bg-white text-deep-green font-bold hover:bg-light-green/20 transition-all">
+                            Global Config
+                        </Link>
                         <Link to="/admin" className="px-5 py-2.5 rounded-xl border-2 border-deep-green/10 bg-white text-deep-green font-bold hover:bg-light-green/20 transition-all">
                             Add New Form
                         </Link>
@@ -103,6 +118,35 @@ const AdminUniversitiesList = () => {
                         <Link to="/admin/applications" className="px-5 py-2.5 rounded-xl border-2 border-deep-green/10 bg-white text-deep-green font-bold hover:bg-light-green/20 transition-all">
                             View Applications
                         </Link>
+                    </div>
+                </div>
+
+                {/* Search & Toolbox */}
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border-2 border-light-green/50 shadow-sm">
+                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                        <div className="relative w-full sm:w-72">
+                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-deep-green/50">search</span>
+                            <input 
+                                type="text" 
+                                placeholder="Search all..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border-2 border-light-green/50 rounded-xl focus:outline-none focus:border-deep-green transition-colors text-deep-green font-medium"
+                            />
+                        </div>
+                        <div className="relative w-full sm:w-72">
+                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-deep-green/50">account_balance</span>
+                            <input 
+                                type="text" 
+                                placeholder="Search by Institution..."
+                                value={institutionSearch}
+                                onChange={(e) => setInstitutionSearch(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border-2 border-light-green/50 rounded-xl focus:outline-none focus:border-deep-green transition-colors text-deep-green font-medium"
+                            />
+                        </div>
+                    </div>
+                    <div className="text-deep-green font-bold text-sm whitespace-nowrap">
+                        Showing {filteredUniversities.length} of {universities.length}
                     </div>
                 </div>
 
@@ -119,14 +163,14 @@ const AdminUniversitiesList = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-light-green/30">
-                                {universities.length === 0 ? (
+                                {filteredUniversities.length === 0 ? (
                                     <tr>
                                         <td colSpan="4" className="p-10 text-center text-deep-green/50 font-bold italic">
-                                            No universities or programs found. Add one to get started!
+                                            No universities or programs found matching your search. Add one to get started!
                                         </td>
                                     </tr>
                                 ) : (
-                                    universities.map((uni) => (
+                                    filteredUniversities.map((uni) => (
                                         <motion.tr
                                             key={uni._id}
                                             initial={{ opacity: 0, y: 10 }}
@@ -137,14 +181,14 @@ const AdminUniversitiesList = () => {
                                                 <span className="font-extrabold text-deep-green text-sm">{uni.courseName || "N/A"}</span>
                                             </td>
                                             <td className="p-5 text-sm font-bold text-deep-green/80">
-                                                {uni.name}
+                                                {uni.institutionId?.name || uni.name}
                                             </td>
                                             <td className="p-5">
                                                 <div className="flex flex-col gap-1">
                                                     <span className="text-xs font-bold bg-light-green/30 text-deep-green px-2 py-0.5 rounded-full inline-flex w-fit">{uni.courseLevel?.split(' ')[0] || "Program"}</span>
                                                     <span className="text-xs font-medium text-deep-green/60 flex items-center gap-1">
                                                         <span className="material-symbols-outlined text-[14px]">location_on</span>
-                                                        {uni.city}, {uni.country}
+                                                        {uni.institutionId?.city || uni.city}, {uni.institutionId?.destinationId?.name || uni.country}
                                                     </span>
                                                 </div>
                                             </td>

@@ -59,7 +59,7 @@ const MyApplications = () => {
               <div key={app._id} className="bg-white p-6 rounded-2xl border border-deep-green/10 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                   <h3 className="text-xl font-extrabold text-deep-green">{app.university?.courseName || "Unknown Course"}</h3>
-                  <p className="text-deep-green/70 font-bold">{app.university?.name || "Unknown University"}</p>
+                  <p className="text-deep-green/70 font-bold">{app.university?.institutionId?.name || app.university?.name || "Unknown University"}</p>
                   <p className="text-sm text-deep-green/60 mt-1">Applied on: {new Date(app.createdAt).toLocaleDateString()}</p>
                 </div>
                 
