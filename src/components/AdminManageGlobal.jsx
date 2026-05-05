@@ -238,6 +238,10 @@ const AdminManageGlobal = () => {
                                 <input type="text" value={editingInstitution.ranking || ''} onChange={e => setEditingInstitution({...editingInstitution, ranking: e.target.value})} className="w-full px-4 py-2 rounded-xl border-2 border-light-green focus:border-deep-green focus:outline-none text-deep-green font-medium" />
                             </div>
                             <div>
+                                <label className="block text-xs font-bold text-deep-green/80 uppercase mb-1">Website URL</label>
+                                <input type="text" value={editingInstitution.website || ''} onChange={e => setEditingInstitution({...editingInstitution, website: e.target.value})} className="w-full px-4 py-2 rounded-xl border-2 border-light-green focus:border-deep-green focus:outline-none text-deep-green font-medium" placeholder="www.example.ac.uk" />
+                            </div>
+                            <div>
                                 <label className="block text-xs font-bold text-deep-green/80 uppercase mb-1">Logo URL (or Upload)</label>
                                 <div className="flex gap-2 items-center">
                                     <input type="text" value={editingInstitution.logo || ''} onChange={e => setEditingInstitution({...editingInstitution, logo: e.target.value})} className="w-full px-4 py-2 rounded-xl border-2 border-light-green focus:border-deep-green focus:outline-none text-deep-green font-medium" placeholder="https://..." />

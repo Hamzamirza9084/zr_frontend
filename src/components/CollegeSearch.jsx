@@ -140,7 +140,7 @@ const FilterSection = ({ title, icon, children, defaultOpen = false }) => {
 };
 
 // Extracted Filter Content to reuse in Mobile Drawer and Desktop Sidebar
-const FilterContent = ({ formData, handleChange, setFormData, handleEvaluate, institutions = [], destinations = [], programLevels = [], fieldOfStudies = [] }) => {
+const FilterContent = ({ formData, handleChange, setFormData, handleEvaluate, institutions = [], destinations = [], cities = [], programLevels = [], fieldOfStudies = [] }) => {
   return (
     <div className="space-y-4">
       {/* 6. Program Filters */}
@@ -151,6 +151,10 @@ const FilterContent = ({ formData, handleChange, setFormData, handleEvaluate, in
           <div className="grid grid-cols-2 gap-3">
             <StyledSelect label="Destination" name="destination" value={formData.destination} onChange={handleChange} options={["All Destinations", ...destinations]} />
             <StyledSelect label="Institution" name="institution" value={formData.institution || ""} onChange={handleChange} options={["", ...institutions]} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <StyledSelect label="City" name="city" value={formData.city || ""} onChange={handleChange} options={["", ...cities]} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -337,6 +341,7 @@ const CollegeSearch = () => {
     budget: 25000,
     destination: "All Destinations",
     institution: "",
+    city: "",
     programLevel: "",
     fieldOfStudy: "",
     tuitionMin: 0,
@@ -483,6 +488,10 @@ const CollegeSearch = () => {
       // Auto-clear dependent filters to avoid conflicts
       if (name === 'destination') {
         newData.institution = "";
+        newData.city = "";
+      }
+      if (name === 'institution') {
+        newData.city = "";
       }
 
       return newData;
@@ -518,6 +527,7 @@ const CollegeSearch = () => {
       budget: 25000,
       destination: "All Destinations",
       institution: "",
+      city: "",
       programLevel: "",
       fieldOfStudy: "",
       tuitionMin: 0,
@@ -609,8 +619,16 @@ const CollegeSearch = () => {
     // 2. Institution Name
     if (formData.institution) {
       results = results.filter(uni => {
-        const instName = uni.institutionId?.name || uni.name || '';
+        const instName = (uni.institutionId?.name || uni.name || '').trim();
         return instName.toLowerCase().includes(formData.institution.toLowerCase().trim());
+      });
+    }
+
+    // 2.5. City
+    if (formData.city) {
+      results = results.filter(uni => {
+        const uniCity = uni.institutionId?.city || uni.city || "";
+        return uniCity.toLowerCase().trim() === formData.city.toLowerCase().trim();
       });
     }
 
@@ -800,19 +818,33 @@ const CollegeSearch = () => {
                   handleChange={handleChange}
                   setFormData={setFormData}
                   handleEvaluate={handleEvaluate}
-                  destinations={[...new Set(colleges.map(c => c.institutionId?.destinationId?.name || c.country).filter(Boolean))].sort()}
+                  destinations={[...new Map(colleges.map(c => (c.institutionId?.destinationId?.name || c.country || '').trim()).filter(Boolean).map(n => [n.toLowerCase(), n])).values()].sort()}
                   programLevels={PROGRAM_LEVELS}
                   fieldOfStudies={FIELD_OF_STUDIES}
                   // Same dynamic filtering for mobile
-                  institutions={[...new Set(
+                  institutions={[...new Map(
                     colleges
                       .filter(c => {
-                        const country = c.institutionId?.destinationId?.name || c.country || "";
-                        return formData.destination === "All Destinations" || !formData.destination || country.toLowerCase().trim() === formData.destination.toLowerCase().trim();
+                        const country = (c.institutionId?.destinationId?.name || c.country || '').trim();
+                        return formData.destination === "All Destinations" || !formData.destination || country.toLowerCase() === formData.destination.toLowerCase().trim();
                       })
-                      .map(c => c.institutionId?.name || c.name || "")
-                      .filter(name => name.trim() !== "")
-                  )].sort()}
+                      .map(c => (c.institutionId?.name || c.name || '').trim())
+                      .filter(name => name !== '')
+                      .map(n => [n.toLowerCase(), n])
+                  ).values()].sort()}
+                  cities={[...new Map(
+                    colleges
+                      .filter(c => {
+                        const country = (c.institutionId?.destinationId?.name || c.country || '').trim();
+                        const destMatch = formData.destination === "All Destinations" || !formData.destination || country.toLowerCase() === formData.destination.toLowerCase().trim();
+                        const instName = (c.institutionId?.name || c.name || '').trim();
+                        const instMatch = !formData.institution || instName.toLowerCase().includes(formData.institution.toLowerCase().trim());
+                        return destMatch && instMatch;
+                      })
+                      .map(c => (c.institutionId?.city || c.city || '').trim())
+                      .filter(city => city !== '')
+                      .map(c => [c.toLowerCase(), c])
+                  ).values()].sort()}
                 />
               </div>
 
@@ -855,19 +887,33 @@ const CollegeSearch = () => {
             handleChange={handleChange}
             setFormData={setFormData}
             handleEvaluate={handleEvaluate}
-            destinations={[...new Set(colleges.map(c => c.institutionId?.destinationId?.name || c.country).filter(Boolean))].sort()}
+            destinations={[...new Map(colleges.map(c => (c.institutionId?.destinationId?.name || c.country || '').trim()).filter(Boolean).map(n => [n.toLowerCase(), n])).values()].sort()}
             programLevels={PROGRAM_LEVELS}
             fieldOfStudies={FIELD_OF_STUDIES}
             // Dynamically filter institutions based on selected Destination
-            institutions={[...new Set(
+            institutions={[...new Map(
               colleges
                 .filter(c => {
-                  const country = c.institutionId?.destinationId?.name || c.country || "";
-                  return formData.destination === "All Destinations" || !formData.destination || country.toLowerCase().trim() === formData.destination.toLowerCase().trim();
+                  const country = (c.institutionId?.destinationId?.name || c.country || '').trim();
+                  return formData.destination === "All Destinations" || !formData.destination || country.toLowerCase() === formData.destination.toLowerCase().trim();
                 })
-                .map(c => c.institutionId?.name || c.name || "")
-                .filter(name => name.trim() !== "")
-            )].sort()}
+                .map(c => (c.institutionId?.name || c.name || '').trim())
+                .filter(name => name !== '')
+                .map(n => [n.toLowerCase(), n])
+            ).values()].sort()}
+            cities={[...new Map(
+              colleges
+                .filter(c => {
+                  const country = (c.institutionId?.destinationId?.name || c.country || '').trim();
+                  const destMatch = formData.destination === "All Destinations" || !formData.destination || country.toLowerCase() === formData.destination.toLowerCase().trim();
+                  const instName = (c.institutionId?.name || c.name || '').trim();
+                  const instMatch = !formData.institution || instName.toLowerCase().includes(formData.institution.toLowerCase().trim());
+                  return destMatch && instMatch;
+                })
+                .map(c => (c.institutionId?.city || c.city || '').trim())
+                .filter(city => city !== '')
+                .map(c => [c.toLowerCase(), c])
+            ).values()].sort()}
           />
         </div>
 
