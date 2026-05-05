@@ -140,6 +140,8 @@ const AdminAddUniversity = () => {
   const [destinations, setDestinations] = useState([]);
   const [institutions, setInstitutions] = useState([]);
   const [showNewInstitutionInput, setShowNewInstitutionInput] = useState(false);
+  const [selectedInstitutionName, setSelectedInstitutionName] = useState("");
+  const [selectedCityIds, setSelectedCityIds] = useState([]);
 
   useEffect(() => {
     const fetchGlobalData = async () => {
@@ -203,6 +205,7 @@ const AdminAddUniversity = () => {
             appFee: data.appFee || 'Free Waiver',
             successChance: data.successChance || 'High'
           });
+          setSelectedInstitutionName(data.institutionId?.name || data.name || "");
           
           // Use a default list to check against if destinations state hasn't populated yet,
           // though typically data.country will just be shown as custom if it's not in the dropdown.
@@ -314,6 +317,8 @@ const AdminAddUniversity = () => {
     });
     setTagInput("");
     setIntakeInput("");
+    setSelectedInstitutionName("");
+    setSelectedCityIds([]);
   };
 
   const processCSVData = async (csvText) => {
@@ -551,12 +556,18 @@ const AdminAddUniversity = () => {
         const response = await axios.put(`/api/universities/${id}`, finalPayload, config);
         console.log("Updated Response:", response.data);
         alert("University Updated Successfully!");
-        navigate('/admin/universities'); // Redirect to list after edit
+        navigate('/admin/universities');
       } else {
-        // Add mode: POST to root
-        const response = await axios.post('/api/universities', finalPayload, config);
-        console.log("Response:", response.data);
-        alert("University Added Successfully!");
+        // Add mode: create records for each selected city
+        const idsToCreate = selectedCityIds.length > 1 ? selectedCityIds : [institutionIdToUse];
+        let createdCount = 0;
+        for (const instId of idsToCreate) {
+          const payload = { ...formData, institutionId: instId };
+          await axios.post('/api/universities', payload, config);
+          createdCount++;
+        }
+        console.log(`Created ${createdCount} program(s)`);
+        alert(`${createdCount} Program${createdCount > 1 ? 's' : ''} Added Successfully!`);
         resetForm();
         setIntakeInput("");
       }
@@ -566,6 +577,23 @@ const AdminAddUniversity = () => {
       alert(error.response?.data?.message || error.message || "Failed to add university");
     }
   };
+
+  // Computed: institutions filtered by selected destination
+  const filteredInstitutionsByDest = institutions.filter(i => {
+    if (!formData.country) return false;
+    const destIdOfInst = i.destinationId?._id || i.destinationId;
+    const destIdOfInput = destinations.find(d => d.name?.trim().toLowerCase() === formData.country?.trim().toLowerCase())?._id;
+    return destIdOfInst === destIdOfInput || (i.destinationId?.name || '').trim().toLowerCase() === (formData.country || '').trim().toLowerCase();
+  });
+  const uniqueInstitutionNames = [...new Map(
+    filteredInstitutionsByDest
+      .map(i => (i.name || '').trim())
+      .filter(n => n !== '')
+      .map(n => [n.toLowerCase(), n])
+  ).values()].sort();
+  const citiesForSelectedInstitution = selectedInstitutionName
+    ? filteredInstitutionsByDest.filter(i => (i.name || '').trim().toLowerCase() === selectedInstitutionName.trim().toLowerCase())
+    : [];
 
   return (
     <div className="flex flex-col lg:flex-row h-screen bg-deep-green overflow-hidden font-display">
@@ -666,14 +694,18 @@ const AdminAddUniversity = () => {
                     const val = e.target.value;
                     if (val === "Add New Destination...") {
                       setShowNewCountryInput(true);
-                      setShowNewInstitutionInput(true); // Must add new institution if dest is new
+                      setShowNewInstitutionInput(true);
+                      setSelectedInstitutionName("");
+                      setSelectedCityIds([]);
                       setFormData(prev => ({ ...prev, country: "", institutionId: "", name: "" }));
                     } else {
                       setFormData(prev => ({ ...prev, country: val, institutionId: "" }));
                       setShowNewInstitutionInput(false);
+                      setSelectedInstitutionName("");
+                      setSelectedCityIds([]);
                     }
                   }}
-                  options={["", ...destinations.map(d => d.name), "Add New Destination..."]}
+                  options={["", ...destinations.filter(d => d.enabled !== false).map(d => d.name), "Add New Destination..."]}
                   className="md:col-span-2"
                 />
               )}
@@ -682,32 +714,133 @@ const AdminAddUniversity = () => {
             {/* Institution Selection */}
             {formData.country && !showNewInstitutionInput && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5 border-t border-light-green/20 pt-4">
+                {/* Step 2: Select Institution Name */}
                 <StyledSelect
                   label="Institution"
-                  name="institutionId"
-                  value={formData.institutionId || ""}
+                  value={selectedInstitutionName || ""}
                   onChange={(e) => {
                     const val = e.target.value;
                     if (val === "Add New Institution...") {
                       setShowNewInstitutionInput(true);
+                      setSelectedInstitutionName("");
+                      setSelectedCityIds([]);
                       setFormData(prev => ({ ...prev, institutionId: "", name: "", city: "", ranking: "", website: "", logo: "", mapLocation: "" }));
                     } else {
-                      setFormData(prev => ({ ...prev, institutionId: val, name: "" }));
+                      setSelectedInstitutionName(val);
+                      setSelectedCityIds([]);
+                      const matching = filteredInstitutionsByDest.filter(i => (i.name || '').trim().toLowerCase() === val.trim().toLowerCase());
+                      if (matching.length === 1) {
+                        // Single campus: auto-select in edit mode, or add to selectedCityIds in add mode
+                        if (isEditMode) {
+                          setFormData(prev => ({ ...prev, institutionId: matching[0]._id, name: "" }));
+                        } else {
+                          setSelectedCityIds([matching[0]._id]);
+                          setFormData(prev => ({ ...prev, institutionId: matching[0]._id, name: "" }));
+                        }
+                      } else {
+                        setFormData(prev => ({ ...prev, institutionId: "", name: "" }));
+                      }
                     }
                   }}
                   className="md:col-span-2"
                   options={[
                     { value: "", label: "Select an Institution..." },
-                    ...institutions
-                      .filter(i => {
-                        const destIdOfInst = i.destinationId?._id || i.destinationId;
-                        const destIdOfInput = destinations.find(d => d.name === formData.country)?._id;
-                        return destIdOfInst === destIdOfInput || i.destinationId?.name === formData.country;
-                      })
-                      .map(i => ({ value: i._id, label: i.name })),
+                    ...uniqueInstitutionNames.map(name => ({ value: name, label: name })),
                     { value: "Add New Institution...", label: "+ Add New Institution..." }
                   ]}
                 />
+
+                {/* Step 3: Select Campus Cities (multi-select checkboxes) */}
+                {selectedInstitutionName && citiesForSelectedInstitution.length > 1 && !isEditMode && (
+                  <div className="md:col-span-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-bold text-deep-green flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[18px]">location_on</span>
+                        Select Campus Cities
+                      </label>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          if (selectedCityIds.length === citiesForSelectedInstitution.length) {
+                            setSelectedCityIds([]);
+                            setFormData(prev => ({ ...prev, institutionId: "" }));
+                          } else {
+                            const allIds = citiesForSelectedInstitution.map(i => i._id);
+                            setSelectedCityIds(allIds);
+                            setFormData(prev => ({ ...prev, institutionId: allIds[0] }));
+                          }
+                        }}
+                        className="text-xs font-bold text-deep-green/70 hover:text-deep-green transition-colors"
+                      >
+                        {selectedCityIds.length === citiesForSelectedInstitution.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {citiesForSelectedInstitution.map(inst => {
+                        const isSelected = selectedCityIds.includes(inst._id);
+                        return (
+                          <label
+                            key={inst._id}
+                            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${
+                              isSelected 
+                                ? 'border-deep-green bg-light-green/20 shadow-sm' 
+                                : 'border-light-green/50 bg-white hover:border-light-green hover:bg-light-green/5'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                let newIds;
+                                if (isSelected) {
+                                  newIds = selectedCityIds.filter(id => id !== inst._id);
+                                } else {
+                                  newIds = [...selectedCityIds, inst._id];
+                                }
+                                setSelectedCityIds(newIds);
+                                setFormData(prev => ({ ...prev, institutionId: newIds[0] || "" }));
+                              }}
+                              className="accent-deep-green w-4 h-4 rounded"
+                            />
+                            <span className={`text-sm font-bold ${isSelected ? 'text-deep-green' : 'text-deep-green/70'}`}>
+                              {inst.city || 'Unknown City'}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {selectedCityIds.length > 1 && (
+                      <p className="text-xs font-medium text-deep-green/60 flex items-center gap-1 mt-1">
+                        <span className="material-symbols-outlined text-[14px]">info</span>
+                        {selectedCityIds.length} cities selected — the program will be created for each campus
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Edit mode: single city select */}
+                {selectedInstitutionName && citiesForSelectedInstitution.length > 1 && isEditMode && (
+                  <StyledSelect
+                    label="Campus City"
+                    value={formData.institutionId || ""}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, institutionId: e.target.value }));
+                    }}
+                    className="md:col-span-2"
+                    options={[
+                      { value: "", label: "Select Campus City..." },
+                      ...citiesForSelectedInstitution.map(i => ({ value: i._id, label: i.city || "Unknown City" }))
+                    ]}
+                  />
+                )}
+
+                {/* Show city info when auto-selected (single campus) */}
+                {selectedInstitutionName && citiesForSelectedInstitution.length === 1 && citiesForSelectedInstitution[0].city && (
+                  <div className="md:col-span-2 px-4 py-2.5 rounded-xl bg-light-green/10 border border-light-green/30 text-sm font-medium text-deep-green flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">location_on</span>
+                    Campus: {citiesForSelectedInstitution[0].city}
+                  </div>
+                )}
               </div>
             )}
 
@@ -717,7 +850,7 @@ const AdminAddUniversity = () => {
                 <div className="md:col-span-2 flex items-center justify-between">
                    <h4 className="text-sm font-bold text-primary">Adding New Institution to {formData.country}</h4>
                    {!showNewCountryInput && (
-                     <button type="button" onClick={() => setShowNewInstitutionInput(false)} className="text-xs font-bold text-red-500 hover:text-red-700">Cancel</button>
+                     <button type="button" onClick={() => { setShowNewInstitutionInput(false); setSelectedInstitutionName(""); }} className="text-xs font-bold text-red-500 hover:text-red-700">Cancel</button>
                    )}
                 </div>
                 <StyledInput label="Institution Name" name="name" value={formData.name} onChange={handleChange} placeholder="e.g. University of Westminster" className="md:col-span-2" />
