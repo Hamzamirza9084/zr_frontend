@@ -370,6 +370,126 @@ const CollegeSearch = () => {
   const [savedColleges, setSavedColleges] = useState([]);
   const [showSavedOnly, setShowSavedOnly] = useState(false);
 
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [totalResultsCount, setTotalResultsCount] = useState(0);
+
+  // Filter metadata state
+  const [meta, setMeta] = useState({
+    destinations: [],
+    institutions: [],
+    cities: [],
+    courseLevels: [],
+    fieldsOfStudy: []
+  });
+
+  const loaderRef = React.useRef(null);
+
+  // Fetch filter metadata on mount
+  useEffect(() => {
+    const fetchMeta = async () => {
+      try {
+        const { data } = await axios.get('/api/universities/meta');
+        setMeta(data);
+      } catch (err) {
+        console.error("Failed to load filter metadata:", err);
+      }
+    };
+    fetchMeta();
+  }, []);
+
+  const fetchColleges = async (pageNumber = 1, append = false, currentFormData = formData, savedIds = null) => {
+    try {
+      if (pageNumber === 1) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      const params = new URLSearchParams();
+      params.append('page', pageNumber);
+      params.append('limit', 30);
+
+      // If we are loading saved colleges, pass the IDs to the API
+      if (savedIds) {
+        params.append('ids', savedIds.join(','));
+      } else {
+        // Pass standard filters
+        if (currentFormData.destination && currentFormData.destination !== 'All Destinations') {
+          params.append('destination', currentFormData.destination);
+        }
+        if (currentFormData.institution) {
+          params.append('institution', currentFormData.institution);
+        }
+        if (currentFormData.city) {
+          params.append('city', currentFormData.city);
+        }
+        if (currentFormData.programLevel) {
+          params.append('courseLevel', currentFormData.programLevel);
+        }
+        if (currentFormData.fieldOfStudy) {
+          params.append('fieldOfStudy', currentFormData.fieldOfStudy);
+        }
+        if (currentFormData.tuitionMin !== undefined) {
+          params.append('tuitionMin', currentFormData.tuitionMin);
+        }
+        if (currentFormData.tuitionMax !== undefined) {
+          params.append('tuitionMax', currentFormData.tuitionMax);
+        }
+        if (currentFormData.intakes && currentFormData.intakes.length > 0) {
+          params.append('intakes', currentFormData.intakes.join(','));
+        }
+        if (currentFormData.programTag) {
+          params.append('tag', currentFormData.programTag);
+        }
+        if (currentFormData.studyGap > 0) {
+          params.append('studyGap', currentFormData.studyGap);
+        }
+        if (currentFormData.backlog > 0) {
+          params.append('backlog', currentFormData.backlog);
+        }
+        if (currentFormData.programDurationMin !== undefined) {
+          params.append('durationMin', currentFormData.programDurationMin);
+        }
+        if (currentFormData.programDurationMax !== undefined) {
+          params.append('durationMax', currentFormData.programDurationMax);
+        }
+        if (currentFormData.requireEnglish) {
+          params.append('requireEnglish', 'true');
+          params.append('englishTest', currentFormData.englishTest);
+          if (currentFormData.scoreOA) params.append('scoreOA', currentFormData.scoreOA);
+          if (currentFormData.scoreS) params.append('scoreS', currentFormData.scoreS);
+        }
+        if (currentFormData.hasMOI) {
+          params.append('hasMOI', 'true');
+        }
+      }
+
+      const { data } = await axios.get(`/api/universities?${params.toString()}`);
+      
+      if (append) {
+        setColleges(prev => [...prev, ...data.data]);
+        setFilteredColleges(prev => [...prev, ...data.data]);
+      } else {
+        setColleges(data.data);
+        setFilteredColleges(data.data);
+      }
+
+      setPage(data.page);
+      setHasMore(data.hasMore);
+      setTotalResultsCount(data.totalCount);
+      setLoading(false);
+      setLoadingMore(false);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load universities.");
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
   useEffect(() => {
     const fetchSaved = async () => {
       try {
@@ -386,6 +506,44 @@ const CollegeSearch = () => {
     };
     fetchSaved();
   }, []);
+
+  // Sync colleges list when showSavedOnly or savedColleges changes
+  useEffect(() => {
+    if (showSavedOnly) {
+      if (savedColleges.length > 0) {
+        fetchColleges(1, false, formData, savedColleges);
+      } else {
+        setColleges([]);
+        setFilteredColleges([]);
+        setTotalResultsCount(0);
+        setHasMore(false);
+        setLoading(false);
+      }
+    } else {
+      fetchColleges(1, false, formData);
+    }
+  }, [showSavedOnly, savedColleges]);
+
+  // Infinite Scroll Intersection Observer
+  useEffect(() => {
+    if (loading || loadingMore || !hasMore || showSavedOnly) return;
+
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) {
+        fetchColleges(page + 1, true, formData);
+      }
+    }, { threshold: 0.5 });
+
+    if (loaderRef.current) {
+      observer.observe(loaderRef.current);
+    }
+
+    return () => {
+      if (loaderRef.current) {
+        observer.unobserve(loaderRef.current);
+      }
+    };
+  }, [loading, loadingMore, hasMore, page, formData, showSavedOnly]);
 
   const toggleSave = async (collegeId) => {
     try {
@@ -431,24 +589,6 @@ const CollegeSearch = () => {
     };
     checkStudentStatus();
   }, [navigate]);
-
-  // Fetch Data
-  useEffect(() => {
-    const fetchColleges = async () => {
-      try {
-        setLoading(true);
-        const { data } = await axios.get('/api/universities');
-        setColleges(data);
-        setFilteredColleges(data);
-        setLoading(false);
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load universities.");
-        setLoading(false);
-      }
-    };
-    fetchColleges();
-  }, []);
 
   // Pre-fill from Profile
   useEffect(() => {
@@ -499,8 +639,7 @@ const CollegeSearch = () => {
   };
 
   const handleReset = () => {
-    // Reset filters to their initial empty states
-    setFormData({
+    const defaultFormData = {
       nationality: "India",
       educationCountry: "India",
       qualification: "Bachelor's Degree",
@@ -547,9 +686,10 @@ const CollegeSearch = () => {
       prerequisiteMissing: "",
       educationBackgroundMissing: "",
       hasMOI: false
-    });
-    // Immediately show all colleges again
-    setFilteredColleges(colleges);
+    };
+    setFormData(defaultFormData);
+    setShowSavedOnly(false);
+    fetchColleges(1, false, defaultFormData);
   };
 
   const handleApply = async (universityId) => {
@@ -603,172 +743,8 @@ const CollegeSearch = () => {
   };
 
   const handleEvaluate = () => {
-    console.log("Evaluating with filters:", formData);
-    // Always start filtering from the full list of colleges
-    let results = [...colleges];
-
-    // 1. Destination (Country)
-    if (formData.destination && formData.destination !== "All Destinations") {
-      results = results.filter(uni => {
-        const uniCountry = uni.institutionId?.destinationId?.name || uni.country || "";
-        const match = uniCountry.toLowerCase().trim() === formData.destination.toLowerCase().trim();
-        return match;
-      });
-    }
-
-    // 2. Institution Name
-    if (formData.institution) {
-      results = results.filter(uni => {
-        const instName = (uni.institutionId?.name || uni.name || '').trim();
-        return instName.toLowerCase().includes(formData.institution.toLowerCase().trim());
-      });
-    }
-
-    // 2.5. City
-    if (formData.city) {
-      results = results.filter(uni => {
-        const uniCity = uni.institutionId?.city || uni.city || "";
-        return uniCity.toLowerCase().trim() === formData.city.toLowerCase().trim();
-      });
-    }
-
-    // 3. Program Level
-    if (formData.programLevel) {
-      results = results.filter(uni => uni.courseLevel?.toLowerCase().includes(formData.programLevel.toLowerCase()));
-    }
-
-    // 4. Field of Study
-    if (formData.fieldOfStudy) {
-      results = results.filter(uni =>
-        uni.fieldOfStudy?.toLowerCase().includes(formData.fieldOfStudy.toLowerCase().trim())
-      );
-    }
-
-    // 5. Tuition (Fees Range)
-    if (formData.tuitionMin !== undefined || formData.tuitionMax !== undefined) {
-      results = results.filter(uni => {
-        const fee = parseFloat((uni.tuitionFee || "0").replace(/[^0-9.]/g, ''));
-        const minFee = formData.tuitionMin || 0;
-        const maxFee = formData.tuitionMax || 100000;
-        return fee >= minFee && fee <= maxFee;
-      });
-    }
-
-    // 6. Intakes
-    if (formData.intakes && formData.intakes.length > 0) {
-      results = results.filter(uni => {
-        let allUniIntakes = [];
-        if (Array.isArray(uni.intakes)) {
-          uni.intakes.forEach(i => {
-            allUniIntakes = allUniIntakes.concat(i.split(',').map(s => s.trim()));
-          });
-        } else if (uni.intakes) {
-          allUniIntakes = uni.intakes.split(',').map(i => i.trim());
-        }
-
-        return formData.intakes.some(selectedIntake => {
-          const parts = selectedIntake.trim().split(' ');
-          if (parts.length < 2) return false;
-          const monthPrefix = parts[0].substring(0, 3).toLowerCase();
-          const year = parts[parts.length - 1];
-
-          return allUniIntakes.some(uniIntake => {
-            const uParts = uniIntake.trim().split(' ');
-            if (uParts.length === 0) return false;
-            const uMonthPrefix = uParts[0].substring(0, 3).toLowerCase();
-
-            // If uniIntake has no year (e.g., "Sep" or "September")
-            if (uParts.length === 1 || !/\d/.test(uParts[uParts.length - 1])) {
-              return uMonthPrefix === monthPrefix;
-            }
-
-            const uYear = uParts[uParts.length - 1];
-            return uMonthPrefix === monthPrefix && uYear === year;
-          });
-        });
-      });
-    }
-
-    // 7. Program Tag
-    if (formData.programTag) {
-      results = results.filter(uni => uni.tags?.includes(formData.programTag));
-    }
-
-    // 9. Sliders - Study Gap
-    if (formData.studyGap > 0) {
-      results = results.filter(uni => {
-        if (!uni.gapLimit) return true;
-        return parseFloat(formData.studyGap) <= parseFloat(uni.gapLimit);
-      });
-    }
-
-    // 10. Sliders - Backlog
-    if (formData.backlog > 0) {
-      results = results.filter(uni => {
-        if (!uni.maxBacklogs) return true;
-        return parseInt(formData.backlog) <= parseInt(uni.maxBacklogs);
-      });
-    }
-
-    // 11. Program Duration
-    if (formData.programDurationMin !== undefined || formData.programDurationMax !== undefined) {
-      results = results.filter(uni => {
-        // Parse the duration string (e.g., "12", "24 Months", "1 Year") into months
-        let durationInMonths = 0;
-        if (uni.duration) {
-          const durationStr = uni.duration.toString().toLowerCase();
-          const parsedValue = parseFloat(durationStr.replace(/[^0-9.]/g, '')) || 0;
-
-          if (durationStr.includes('year') || durationStr.includes('yr')) {
-            durationInMonths = parsedValue * 12;
-          } else {
-            durationInMonths = parsedValue; // Default assume months if just a number
-          }
-        }
-
-        // If there is no duration on the uni object, decide whether to show or hide it. 
-        // Showing it by default assuming we don't want to over-filter sparse data.
-        if (durationInMonths === 0) return true;
-
-        const min = formData.programDurationMin || 1;
-        const max = formData.programDurationMax || 96;
-        return durationInMonths >= min && durationInMonths <= max;
-      });
-    }
-
-    // 12. English Requirements & MOI Exemption
-    if (formData.requireEnglish || formData.hasMOI) {
-      results = results.filter(uni => {
-        let meetsEnglish = false;
-        let meetsMOI = false;
-
-        // Check English Test Scores
-        if (formData.requireEnglish && formData.englishTest) {
-          if (uni.englishRequirements && uni.englishRequirements.length > 0) {
-            const req = uni.englishRequirements.find(r => r.testName === formData.englishTest);
-            if (req) {
-              const testOA = formData.scoreOA ? parseFloat(formData.scoreOA) >= parseFloat(req.minOverall || 0) : true;
-              const testS = formData.scoreS ? parseFloat(formData.scoreS) >= parseFloat(req.minSection || 0) : true;
-              if (testOA && testS) {
-                meetsEnglish = true;
-              }
-            }
-          }
-        }
-
-        // Check MOI
-        if (formData.hasMOI && uni.acceptsMOI === 'Yes') {
-          meetsMOI = true;
-        }
-
-        if (formData.requireEnglish && !formData.hasMOI) return meetsEnglish;
-        if (!formData.requireEnglish && formData.hasMOI) return meetsMOI;
-        return meetsEnglish || meetsMOI;
-      });
-    }
-
-    console.log("Filtered Results:", results.length);
-    setFilteredColleges(results);
+    setShowSavedOnly(false);
+    fetchColleges(1, false, formData);
     setShowMobileFilters(false);
   };
 
@@ -777,6 +753,37 @@ const CollegeSearch = () => {
     if (uni.courseName?.toLowerCase().includes('tech')) return 'computer';
     return 'account_balance';
   };
+
+  // Helper for consistent name normalization
+  const norm = (str) => (str || '').trim();
+  const normLower = (str) => norm(str).toLowerCase();
+
+  // Derived: unique destination names
+  const availableDestinations = meta.destinations.map(d => d.name).sort();
+
+  // Derived: unique institutions filtered by selected destination
+  const selectedDestObj = meta.destinations.find(d => normLower(d.name) === normLower(formData.destination));
+  const selectedDestId = selectedDestObj?._id;
+
+  const availableInstitutions = meta.institutions
+    .filter(inst => !selectedDestId || inst.destinationId === selectedDestId)
+    .map(inst => inst.name)
+    .sort();
+
+  // Derived: unique cities filtered by selected destination + institution
+  const availableCities = meta.institutions
+    .filter(inst => {
+      const matchesDest = !selectedDestId || inst.destinationId === selectedDestId;
+      const matchesInst = !formData.institution || normLower(inst.name).includes(normLower(formData.institution));
+      return matchesDest && matchesInst;
+    })
+    .map(inst => inst.city)
+    .filter(Boolean)
+    .filter((v, i, self) => self.indexOf(v) === i) // unique
+    .sort();
+
+  const availableCourseLevels = meta.courseLevels.length > 0 ? meta.courseLevels : PROGRAM_LEVELS;
+  const availableFieldsOfStudy = meta.fieldsOfStudy.length > 0 ? meta.fieldsOfStudy : FIELD_OF_STUDIES;
 
   return (
     <div className="flex flex-1 h-[calc(100vh-80px)] overflow-hidden bg-off-white font-display relative">
@@ -818,33 +825,11 @@ const CollegeSearch = () => {
                   handleChange={handleChange}
                   setFormData={setFormData}
                   handleEvaluate={handleEvaluate}
-                  destinations={[...new Map(colleges.map(c => (c.institutionId?.destinationId?.name || c.country || '').trim()).filter(Boolean).map(n => [n.toLowerCase(), n])).values()].sort()}
-                  programLevels={PROGRAM_LEVELS}
-                  fieldOfStudies={FIELD_OF_STUDIES}
-                  // Same dynamic filtering for mobile
-                  institutions={[...new Map(
-                    colleges
-                      .filter(c => {
-                        const country = (c.institutionId?.destinationId?.name || c.country || '').trim();
-                        return formData.destination === "All Destinations" || !formData.destination || country.toLowerCase() === formData.destination.toLowerCase().trim();
-                      })
-                      .map(c => (c.institutionId?.name || c.name || '').trim())
-                      .filter(name => name !== '')
-                      .map(n => [n.toLowerCase(), n])
-                  ).values()].sort()}
-                  cities={[...new Map(
-                    colleges
-                      .filter(c => {
-                        const country = (c.institutionId?.destinationId?.name || c.country || '').trim();
-                        const destMatch = formData.destination === "All Destinations" || !formData.destination || country.toLowerCase() === formData.destination.toLowerCase().trim();
-                        const instName = (c.institutionId?.name || c.name || '').trim();
-                        const instMatch = !formData.institution || instName.toLowerCase().includes(formData.institution.toLowerCase().trim());
-                        return destMatch && instMatch;
-                      })
-                      .map(c => (c.institutionId?.city || c.city || '').trim())
-                      .filter(city => city !== '')
-                      .map(c => [c.toLowerCase(), c])
-                  ).values()].sort()}
+                  destinations={availableDestinations}
+                  programLevels={availableCourseLevels}
+                  fieldOfStudies={availableFieldsOfStudy}
+                  institutions={availableInstitutions}
+                  cities={availableCities}
                 />
               </div>
 
@@ -887,33 +872,11 @@ const CollegeSearch = () => {
             handleChange={handleChange}
             setFormData={setFormData}
             handleEvaluate={handleEvaluate}
-            destinations={[...new Map(colleges.map(c => (c.institutionId?.destinationId?.name || c.country || '').trim()).filter(Boolean).map(n => [n.toLowerCase(), n])).values()].sort()}
-            programLevels={PROGRAM_LEVELS}
-            fieldOfStudies={FIELD_OF_STUDIES}
-            // Dynamically filter institutions based on selected Destination
-            institutions={[...new Map(
-              colleges
-                .filter(c => {
-                  const country = (c.institutionId?.destinationId?.name || c.country || '').trim();
-                  return formData.destination === "All Destinations" || !formData.destination || country.toLowerCase() === formData.destination.toLowerCase().trim();
-                })
-                .map(c => (c.institutionId?.name || c.name || '').trim())
-                .filter(name => name !== '')
-                .map(n => [n.toLowerCase(), n])
-            ).values()].sort()}
-            cities={[...new Map(
-              colleges
-                .filter(c => {
-                  const country = (c.institutionId?.destinationId?.name || c.country || '').trim();
-                  const destMatch = formData.destination === "All Destinations" || !formData.destination || country.toLowerCase() === formData.destination.toLowerCase().trim();
-                  const instName = (c.institutionId?.name || c.name || '').trim();
-                  const instMatch = !formData.institution || instName.toLowerCase().includes(formData.institution.toLowerCase().trim());
-                  return destMatch && instMatch;
-                })
-                .map(c => (c.institutionId?.city || c.city || '').trim())
-                .filter(city => city !== '')
-                .map(c => [c.toLowerCase(), c])
-            ).values()].sort()}
+            destinations={availableDestinations}
+            programLevels={availableCourseLevels}
+            fieldOfStudies={availableFieldsOfStudy}
+            institutions={availableInstitutions}
+            cities={availableCities}
           />
         </div>
 
@@ -940,7 +903,7 @@ const CollegeSearch = () => {
                 <span className="text-xs font-bold uppercase tracking-wide text-white/90">Live Results</span>
               </div>
               <h2 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">University Matches</h2>
-              <p className="text-white/70 mt-2 font-medium">Found <span className="text-white font-black underline decoration-white decoration-4 underline-offset-2">{filteredColleges.length}</span> programs based on your profile.</p>
+              <p className="text-white/70 mt-2 font-medium">Found <span className="text-white font-black underline decoration-white decoration-4 underline-offset-2">{totalResultsCount}</span> programs based on your profile.</p>
             </div>
 
             <div className="flex flex-wrap gap-3">
@@ -977,171 +940,180 @@ const CollegeSearch = () => {
               <span className="material-symbols-outlined text-4xl text-white/70 animate-spin">refresh</span>
             </div>
           ) : (
-            /* Grid */
-            <motion.div
-              key={filteredColleges.map(c => c._id).join(',') + `-saved-${showSavedOnly}`}
-              className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
-              initial="hidden"
-              animate="show"
-              variants={{
-                hidden: { opacity: 0 },
-                show: {
-                  opacity: 1,
-                  transition: { staggerChildren: 0.1 }
-                }
-              }}
-            >
-              {(showSavedOnly ? filteredColleges.filter(c => savedColleges.includes(c._id)) : filteredColleges).map((college, idx) => (
-                <motion.div
-                  key={college._id || idx}
-                  variants={{
-                    hidden: { opacity: 0, y: 20 },
-                    show: { opacity: 1, y: 0 }
-                  }}
-                  className="bg-white rounded-2xl border border-gray-100 shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col h-full"
-                >
-                  {/* Header Section */}
-                  <div className="p-6 pb-4 flex justify-between items-start gap-4 bg-[#00674F] rounded-t-2xl">
-                    <div className="flex gap-4 flex-1">
-                      {/* University Icon / Logo */}
-                      <div className="size-12 rounded-lg bg-white border border-white/20 flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm">
-                        {college.institutionId?.logo || college.logo ? (
-                          <img src={college.institutionId?.logo || college.logo} alt={`${college.institutionId?.name || college.name} Logo`} className="w-full h-full object-contain p-1" />
-                        ) : (
-                          <span className="material-symbols-outlined text-[#0f4c3a] text-2xl">apartment</span>
-                        )}
-                      </div>
-                      {/* University Info */}
-                      <div className="flex-1">
-                        <h4 className="text-sm font-bold text-white">{college.institutionId?.name || college.name || "Unknown University"}</h4>
-                        <p className="text-xs text-white/70">{(college.institutionId?.city || college.city || "")}{((college.institutionId?.city || college.city) && (college.institutionId?.destinationId?.name || college.country)) ? ", " : ""}{(college.institutionId?.destinationId?.name || college.country || "")}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Course Info */}
-                  <div className="px-6 pt-4 pb-3">
-                    <p className="text-[10px] font-bold text-[#0f4c3a]/50 uppercase tracking-wider mb-1">{college.courseLevel || "Program Level"}</p>
-                    <h3 className="text-lg font-extrabold text-gray-900 uppercase leading-tight">{college.courseName || "Unknown Course"}</h3>
-                    {college.courseLink && (
-                      <a href={college.courseLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-[#0f4c3a] hover:text-[#0f4c3a]/70 mt-1.5 transition-colors">
-                        <span className="material-symbols-outlined text-[14px]">link</span>
-                        View Course Details
-                      </a>
-                    )}
-                  </div>
-
-                  {/* Tags */}
-                  {college.tags && college.tags.length > 0 && (
-                    <div className="px-6 pb-4 flex flex-wrap gap-2">
-                      {college.tags.slice(0, 3).map((tag, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0f4c3a] bg-[#0f4c3a]/5 px-2.5 py-1 rounded-full border border-[#0f4c3a]/10">
-                          <span className="material-symbols-outlined text-[13px] text-[#0f4c3a]/60">
-                            {tag.includes('Scholarship') ? 'school' : tag.includes('Demand') ? 'trending_up' : 'verified'}
-                          </span>
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="px-6 border-t border-gray-100">
-                    {/* Info Rows */}
-                    <div className="py-4 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-gray-400 uppercase">Duration</span>
-                        <span className="text-sm font-bold text-gray-900">
-                          {college.duration 
-                            ? (/^\d+$/.test(college.duration.toString().trim()) ? `${college.duration} Months` : college.duration)
-                            : "N/A"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center border-t border-gray-100 pt-3">
-                        <span className="text-xs font-bold text-gray-400 uppercase">App Fee</span>
-                        <span className="text-sm font-bold text-gray-900">{college.appFee || 'Free Waiver'}</span>
-                      </div>
-                      <div className="flex justify-between items-center border-t border-gray-100 pt-3">
-                        <span className="text-xs font-bold text-gray-400 uppercase">Success Chance</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`w-2 h-2 rounded-full ${(!college.successChance || college.successChance.includes('High')) ? 'bg-emerald-500' : college.successChance === 'Medium' ? 'bg-amber-400' : 'bg-red-400'}`}></span>
-                          <span className="text-sm font-bold text-gray-900">{college.successChance || 'High'}</span>
+            <>
+              {/* Grid */}
+              <motion.div
+                key={filteredColleges.map(c => c._id).join(',') + `-saved-${showSavedOnly}`}
+                className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
+                initial="hidden"
+                animate="show"
+                variants={{
+                  hidden: { opacity: 0 },
+                  show: {
+                    opacity: 1,
+                    transition: { staggerChildren: 0.1 }
+                  }
+                }}
+              >
+                {filteredColleges.map((college, idx) => (
+                  <motion.div
+                    key={college._id || idx}
+                    variants={{
+                      hidden: { opacity: 0, y: 20 },
+                      show: { opacity: 1, y: 0 }
+                    }}
+                    className="bg-white rounded-2xl border border-gray-100 shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col h-full"
+                  >
+                    {/* Header Section */}
+                    <div className="p-6 pb-4 flex justify-between items-start gap-4 bg-[#00674F] rounded-t-2xl">
+                      <div className="flex gap-4 flex-1">
+                        {/* University Icon / Logo */}
+                        <div className="size-12 rounded-lg bg-white border border-white/20 flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm">
+                          {college.institutionId?.logo || college.logo ? (
+                            <img src={college.institutionId?.logo || college.logo} alt={`${college.institutionId?.name || college.name} Logo`} className="w-full h-full object-contain p-1" />
+                          ) : (
+                            <span className="material-symbols-outlined text-[#0f4c3a] text-2xl">apartment</span>
+                          )}
+                        </div>
+                        {/* University Info */}
+                        <div className="flex-1">
+                          <h4 className="text-sm font-bold text-white">{college.institutionId?.name || college.name || "Unknown University"}</h4>
+                          <p className="text-xs text-white/70">{(college.institutionId?.city || college.city || "")}{((college.institutionId?.city || college.city) && (college.institutionId?.destinationId?.name || college.country)) ? ", " : ""}{(college.institutionId?.destinationId?.name || college.country || "")}</p>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Requirement & Tuition Box */}
-                  <div className="mx-6 my-4 p-4 bg-gray-50 border border-gray-100 rounded-xl">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">English Req</p>
-                        <div className="flex flex-wrap gap-1">
-                          {college.englishRequirements && college.englishRequirements.length > 0 ? (
-                            college.englishRequirements.slice(0, 2).map((req, i) => (
-                              <span key={i} className="text-xs font-extrabold text-[#0f4c3a] bg-white px-2 py-1 rounded-lg border border-[#0f4c3a]/15 shadow-sm">
-                                {req.testName}: {req.minOverall}
+                    {/* Course Info */}
+                    <div className="px-6 pt-4 pb-3">
+                      <p className="text-[10px] font-bold text-[#0f4c3a]/50 uppercase tracking-wider mb-1">{college.courseLevel || "Program Level"}</p>
+                      <h3 className="text-lg font-extrabold text-gray-900 uppercase leading-tight">{college.courseName || "Unknown Course"}</h3>
+                      {college.courseLink && (
+                        <a href={college.courseLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-[#0f4c3a] hover:text-[#0f4c3a]/70 mt-1.5 transition-colors">
+                          <span className="material-symbols-outlined text-[14px]">link</span>
+                          View Course Details
+                        </a>
+                      )}
+                    </div>
+
+                    {/* Tags */}
+                    {college.tags && college.tags.length > 0 && (
+                      <div className="px-6 pb-4 flex flex-wrap gap-2">
+                        {college.tags.slice(0, 3).map((tag, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0f4c3a] bg-[#0f4c3a]/5 px-2.5 py-1 rounded-full border border-[#0f4c3a]/10">
+                            <span className="material-symbols-outlined text-[13px] text-[#0f4c3a]/60">
+                              {tag.includes('Scholarship') ? 'school' : tag.includes('Demand') ? 'trending_up' : 'verified'}
+                            </span>
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="px-6 border-t border-gray-100">
+                      {/* Info Rows */}
+                      <div className="py-4 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-gray-400 uppercase">Duration</span>
+                          <span className="text-sm font-bold text-gray-900">
+                            {college.duration 
+                              ? (/^\d+$/.test(college.duration.toString().trim()) ? `${college.duration} Months` : college.duration)
+                              : "N/A"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center border-t border-gray-100 pt-3">
+                          <span className="text-xs font-bold text-gray-400 uppercase">App Fee</span>
+                          <span className="text-sm font-bold text-gray-900">{college.appFee || 'Free Waiver'}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-t border-gray-100 pt-3">
+                          <span className="text-xs font-bold text-gray-400 uppercase">Success Chance</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full ${(!college.successChance || college.successChance.includes('High')) ? 'bg-emerald-500' : college.successChance === 'Medium' ? 'bg-amber-400' : 'bg-red-400'}`}></span>
+                            <span className="text-sm font-bold text-gray-900">{college.successChance || 'High'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Requirement & Tuition Box */}
+                    <div className="mx-6 my-4 p-4 bg-gray-50 border border-gray-100 rounded-xl">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">English Req</p>
+                          <div className="flex flex-wrap gap-1">
+                            {college.englishRequirements && college.englishRequirements.length > 0 ? (
+                              college.englishRequirements.slice(0, 2).map((req, i) => (
+                                <span key={i} className="text-xs font-extrabold text-[#0f4c3a] bg-white px-2 py-1 rounded-lg border border-[#0f4c3a]/15 shadow-sm">
+                                  {req.testName}: {req.minOverall}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-sm font-extrabold text-gray-400">N/A</span>
+                            )}
+                            {college.englishRequirements?.length > 2 && <span className="text-[10px] text-gray-400 font-bold self-center">+{college.englishRequirements.length - 2}</span>}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Tuition (1st yr)</p>
+                          <p className="text-base font-extrabold text-gray-900">{college.tuitionFee ? `${getCurrencySymbol(college.institutionId?.destinationId?.name || college.country)}${Number(college.tuitionFee).toLocaleString('en-IN')}` : "N/A"}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Available Intakes */}
+                    <div className="px-6 py-4 border-t border-gray-100">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Available Intakes</p>
+                      <div className="flex gap-3">
+                        {college.intakes ? (
+                          typeof college.intakes === 'string' ? (
+                            college.intakes.split(',').slice(0, 3).map((intake, i) => (
+                              <span key={i} className="px-4 py-2 bg-[#0f4c3a]/5 border border-[#0f4c3a]/10 rounded-lg text-xs font-bold text-[#0f4c3a]">
+                                {intake.trim()}
                               </span>
                             ))
                           ) : (
-                            <span className="text-sm font-extrabold text-gray-400">N/A</span>
-                          )}
-                          {college.englishRequirements?.length > 2 && <span className="text-[10px] text-gray-400 font-bold self-center">+{college.englishRequirements.length - 2}</span>}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Tuition (1st yr)</p>
-                        <p className="text-base font-extrabold text-gray-900">{college.tuitionFee ? `${getCurrencySymbol(college.institutionId?.destinationId?.name || college.country)}${Number(college.tuitionFee).toLocaleString('en-IN')}` : "N/A"}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Available Intakes */}
-                  <div className="px-6 py-4 border-t border-gray-100">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Available Intakes</p>
-                    <div className="flex gap-3">
-                      {college.intakes ? (
-                        typeof college.intakes === 'string' ? (
-                          college.intakes.split(',').slice(0, 3).map((intake, i) => (
-                            <span key={i} className="px-4 py-2 bg-[#0f4c3a]/5 border border-[#0f4c3a]/10 rounded-lg text-xs font-bold text-[#0f4c3a]">
-                              {intake.trim()}
-                            </span>
-                          ))
+                            Array.isArray(college.intakes) && college.intakes.slice(0, 3).map((intake, i) => (
+                              <span key={i} className="px-4 py-2 bg-[#0f4c3a]/5 border border-[#0f4c3a]/10 rounded-lg text-xs font-bold text-[#0f4c3a]">
+                                {intake}
+                              </span>
+                            ))
+                          )
                         ) : (
-                          Array.isArray(college.intakes) && college.intakes.slice(0, 3).map((intake, i) => (
-                            <span key={i} className="px-4 py-2 bg-[#0f4c3a]/5 border border-[#0f4c3a]/10 rounded-lg text-xs font-bold text-[#0f4c3a]">
-                              {intake}
-                            </span>
-                          ))
-                        )
-                      ) : (
-                        <span className="px-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold text-gray-400">
-                          Check availability
-                        </span>
-                      )}
+                          <span className="px-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold text-gray-400">
+                            Check availability
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Action Buttons */}
-                  <div className="px-6 py-5 flex gap-3 items-center mt-auto border-t border-gray-100">
-                    <button
-                      onClick={() => handleApply(college._id)}
-                      className="flex-1 py-3 bg-primary text-deep-green font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-md hover:brightness-90 active:scale-[0.98]"
-                    >
-                      Apply Now
-                      <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-                    </button>
-                    <button
-                      onClick={() => toggleSave(college._id)}
-                      className={`transition-all duration-200 p-2.5 rounded-xl border ${savedColleges.includes(college._id) ? 'border-pink-200 bg-pink-50 text-pink-500' : 'border-gray-200 bg-gray-50 text-gray-400 hover:text-pink-400 hover:border-pink-200 hover:bg-pink-50'}`}
-                    >
-                      <span className="material-symbols-outlined text-2xl">
-                        {savedColleges.includes(college._id) ? 'favorite' : 'favorite_border'}
-                      </span>
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
+                    {/* Action Buttons */}
+                    <div className="px-6 py-5 flex gap-3 items-center mt-auto border-t border-gray-100">
+                      <button
+                        onClick={() => handleApply(college._id)}
+                        className="flex-1 py-3 bg-primary text-deep-green font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-md hover:brightness-90 active:scale-[0.98]"
+                      >
+                        Apply Now
+                        <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                      </button>
+                      <button
+                        onClick={() => toggleSave(college._id)}
+                        className={`transition-all duration-200 p-2.5 rounded-xl border ${savedColleges.includes(college._id) ? 'border-pink-200 bg-pink-50 text-pink-500' : 'border-gray-200 bg-gray-50 text-gray-400 hover:text-pink-400 hover:border-pink-200 hover:bg-pink-50'}`}
+                      >
+                        <span className="material-symbols-outlined text-2xl">
+                          {savedColleges.includes(college._id) ? 'favorite' : 'favorite_border'}
+                        </span>
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+
+              {/* Infinite Scroll Loader Sentinel */}
+              {hasMore && !showSavedOnly && (
+                <div ref={loaderRef} className="flex justify-center items-center py-10 mt-6">
+                  <span className="material-symbols-outlined text-4xl text-white/70 animate-spin">refresh</span>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>

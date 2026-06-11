@@ -5,8 +5,6 @@ import { motion } from 'framer-motion';
 
 const AdminUniversitiesList = () => {
     const [universities, setUniversities] = useState([]);
-    const [destinations, setDestinations] = useState([]);
-    const [institutions, setInstitutions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -17,8 +15,23 @@ const AdminUniversitiesList = () => {
     const [selectedInstitution, setSelectedInstitution] = useState('');
     const [selectedCity, setSelectedCity] = useState('');
 
+    // Pagination states
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [totalResultsCount, setTotalResultsCount] = useState(0);
+
+    const [meta, setMeta] = useState({
+        destinations: [],
+        institutions: [],
+        cities: []
+    });
+
+    const loaderRef = React.useRef(null);
+
+    // Auth check on mount
     useEffect(() => {
-        const checkAdminAndFetch = async () => {
+        const checkAdmin = () => {
             const userString = localStorage.getItem('user');
             if (!userString) {
                 navigate('/login');
@@ -29,92 +42,122 @@ const AdminUniversitiesList = () => {
                 navigate('/');
                 return;
             }
-
-            await fetchData();
         };
-
-        checkAdminAndFetch();
+        checkAdmin();
     }, [navigate]);
 
-    const fetchData = async () => {
+    // Fetch filter metadata on mount
+    useEffect(() => {
+        const fetchMeta = async () => {
+            try {
+                const { data } = await axios.get('/api/universities/meta');
+                setMeta(data);
+            } catch (err) {
+                console.error("Failed to load metadata:", err);
+            }
+        };
+        fetchMeta();
+    }, []);
+
+    const fetchUniversities = async (pageNumber = 1, append = false, filters = {}) => {
         try {
-            setLoading(true);
-            const [uniRes, destRes, instRes] = await Promise.all([
-                axios.get('/api/universities'),
-                axios.get('/api/destinations'),
-                axios.get('/api/institutions')
-            ]);
-            setUniversities(uniRes.data);
-            setDestinations(destRes.data);
-            setInstitutions(instRes.data);
+            if (pageNumber === 1) {
+                setLoading(true);
+            } else {
+                setLoadingMore(true);
+            }
+
+            const params = new URLSearchParams();
+            params.append('page', pageNumber);
+            params.append('limit', 50);
+
+            if (filters.destination) params.append('destination', filters.destination);
+            if (filters.institution) params.append('institution', filters.institution);
+            if (filters.city) params.append('city', filters.city);
+            if (filters.search) params.append('search', filters.search);
+
+            const { data } = await axios.get(`/api/universities?${params.toString()}`);
+
+            if (append) {
+                setUniversities(prev => [...prev, ...data.data]);
+            } else {
+                setUniversities(data.data);
+            }
+
+            setPage(data.page);
+            setHasMore(data.hasMore);
+            setTotalResultsCount(data.totalCount);
             setLoading(false);
+            setLoadingMore(false);
         } catch (err) {
             console.error(err);
-            setError("Failed to load data.");
+            setError("Failed to load universities.");
             setLoading(false);
+            setLoadingMore(false);
         }
     };
+
+    // Trigger fetch whenever filters change
+    useEffect(() => {
+        fetchUniversities(1, false, {
+            destination: selectedDestination,
+            institution: selectedInstitution,
+            city: selectedCity,
+            search: searchTerm
+        });
+    }, [selectedDestination, selectedInstitution, selectedCity, searchTerm]);
+
+    // Infinite Scroll Intersection Observer
+    useEffect(() => {
+        if (loading || loadingMore || !hasMore) return;
+
+        const observer = new IntersectionObserver(entries => {
+            if (entries[0].isIntersecting) {
+                fetchUniversities(page + 1, true, {
+                    destination: selectedDestination,
+                    institution: selectedInstitution,
+                    city: selectedCity,
+                    search: searchTerm
+                });
+            }
+        }, { threshold: 0.5 });
+
+        if (loaderRef.current) {
+            observer.observe(loaderRef.current);
+        }
+
+        return () => {
+            if (loaderRef.current) {
+                observer.unobserve(loaderRef.current);
+            }
+        };
+    }, [loading, loadingMore, hasMore, page, selectedDestination, selectedInstitution, selectedCity, searchTerm]);
 
     // Helper for consistent name normalization
     const norm = (str) => (str || '').trim();
     const normLower = (str) => norm(str).toLowerCase();
 
-    // Derived: unique destination names (case-insensitive dedup)
-    const availableDestinations = [...new Map(
-        universities
-            .map(u => norm(u.institutionId?.destinationId?.name || u.country))
-            .filter(Boolean)
-            .map(n => [normLower(n), n])
-    ).values()].sort();
+    // Derived lists from meta
+    const availableDestinations = meta.destinations.map(d => d.name).sort();
 
-    // Derived: unique institution names filtered by selected destination
-    const availableInstitutions = [...new Map(
-        universities
-            .filter(u => {
-                if (!selectedDestination) return true;
-                const country = norm(u.institutionId?.destinationId?.name || u.country);
-                return normLower(country) === normLower(selectedDestination);
-            })
-            .map(u => norm(u.institutionId?.name || u.name))
-            .filter(n => n !== '')
-            .map(n => [normLower(n), n])
-    ).values()].sort();
+    const selectedDestObj = meta.destinations.find(d => normLower(d.name) === normLower(selectedDestination));
+    const selectedDestId = selectedDestObj?._id;
 
-    // Derived: unique cities filtered by selected destination + institution
-    const availableCities = [...new Map(
-        universities
-            .filter(u => {
-                if (!selectedDestination) return true;
-                const country = norm(u.institutionId?.destinationId?.name || u.country);
-                return normLower(country) === normLower(selectedDestination);
-            })
-            .filter(u => {
-                if (!selectedInstitution) return true;
-                const instName = norm(u.institutionId?.name || u.name);
-                return normLower(instName) === normLower(selectedInstitution);
-            })
-            .map(u => norm(u.institutionId?.city || u.city))
-            .filter(c => c !== '')
-            .map(c => [normLower(c), c])
-    ).values()].sort();
+    const availableInstitutions = meta.institutions
+        .filter(inst => !selectedDestId || inst.destinationId === selectedDestId)
+        .map(inst => inst.name)
+        .sort();
 
-    // Final filtered list
-    const filteredUniversities = universities.filter(uni => {
-        const country = norm(uni.institutionId?.destinationId?.name || uni.country);
-        const instName = norm(uni.institutionId?.name || uni.name);
-        const city = norm(uni.institutionId?.city || uni.city);
-
-        const matchesDest = !selectedDestination || normLower(country) === normLower(selectedDestination);
-        const matchesInst = !selectedInstitution || normLower(instName) === normLower(selectedInstitution);
-        const matchesCity = !selectedCity || normLower(city) === normLower(selectedCity);
-
-        const matchesSearch = !searchTerm ||
-            instName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (uni.courseName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            city.toLowerCase().includes(searchTerm.toLowerCase());
-
-        return matchesDest && matchesInst && matchesCity && matchesSearch;
-    });
+    const availableCities = meta.institutions
+        .filter(inst => {
+            const matchesDest = !selectedDestId || inst.destinationId === selectedDestId;
+            const matchesInst = !selectedInstitution || normLower(inst.name).includes(normLower(selectedInstitution));
+            return matchesDest && matchesInst;
+        })
+        .map(inst => inst.city)
+        .filter(Boolean)
+        .filter((v, i, self) => self.indexOf(v) === i) // unique
+        .sort();
 
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this university/program? This cannot be undone.")) {
@@ -131,6 +174,7 @@ const AdminUniversitiesList = () => {
 
             // Update state to remove deleted university
             setUniversities(universities.filter(uni => uni._id !== id));
+            setTotalResultsCount(prev => Math.max(0, prev - 1));
             alert("University deleted successfully.");
         } catch (err) {
             console.error(err);
@@ -145,7 +189,9 @@ const AdminUniversitiesList = () => {
         setSearchTerm('');
     };
 
-    if (loading) return (
+    const hasActiveFilters = selectedDestination || selectedInstitution || selectedCity || searchTerm;
+
+    if (loading && page === 1) return (
         <div className="flex justify-center items-center h-screen bg-transparent">
             <span className="material-symbols-outlined text-4xl text-white animate-spin">refresh</span>
         </div>
@@ -156,8 +202,6 @@ const AdminUniversitiesList = () => {
             <p className="text-red-500 font-bold">{error}</p>
         </div>
     );
-
-    const hasActiveFilters = selectedDestination || selectedInstitution || selectedCity || searchTerm;
 
     return (
         <div className="min-h-screen bg-transparent py-12 px-6 font-display">
@@ -173,7 +217,7 @@ const AdminUniversitiesList = () => {
                         </div>
                         <div>
                             <h1 className="text-2xl font-extrabold text-deep-green tracking-tight">
-                                Manage Universities <span className="text-lg bg-light-green text-deep-green px-2 py-1 rounded-xl ml-2 inline-block -translate-y-0.5">{universities.length} Total</span>
+                                Manage Universities <span className="text-lg bg-light-green text-deep-green px-2 py-1 rounded-xl ml-2 inline-block -translate-y-0.5">{totalResultsCount} Total</span>
                             </h1>
                             <p className="text-deep-green/60 text-sm font-bold mt-1">View, edit, or remove programs from the system.</p>
                         </div>
@@ -326,7 +370,7 @@ const AdminUniversitiesList = () => {
                                 </span>
                             )}
                             <span className="text-xs font-bold text-deep-green/50 self-center ml-2">
-                                {filteredUniversities.length} program{filteredUniversities.length !== 1 ? 's' : ''} found
+                                {totalResultsCount} program{totalResultsCount !== 1 ? 's' : ''} found
                             </span>
                         </div>
                     )}
@@ -345,7 +389,7 @@ const AdminUniversitiesList = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-light-green/30">
-                                {filteredUniversities.length === 0 ? (
+                                {universities.length === 0 ? (
                                     <tr>
                                         <td colSpan="4" className="p-10 text-center text-deep-green/50 font-bold italic">
                                             {hasActiveFilters
@@ -355,7 +399,7 @@ const AdminUniversitiesList = () => {
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredUniversities.map((uni) => (
+                                    universities.map((uni) => (
                                         <motion.tr
                                             key={uni._id}
                                             initial={{ opacity: 0, y: 10 }}
@@ -402,6 +446,13 @@ const AdminUniversitiesList = () => {
                         </table>
                     </div>
                 </div>
+
+                {/* Infinite Scroll Loader Sentinel */}
+                {hasMore && (
+                    <div ref={loaderRef} className="flex justify-center items-center py-10">
+                        <span className="material-symbols-outlined text-4xl text-deep-green animate-spin">refresh</span>
+                    </div>
+                )}
 
             </div>
         </div>
