@@ -375,12 +375,13 @@ const AdminAddUniversity = () => {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
       for (const row of dataRows) {
-        try {
-          const getValue = (headerName) => {
-            const idx = headers.findIndex((h) => h === headerName.toLowerCase());
-            return idx !== -1 && row[idx] ? row[idx] : '';
-          };
+        // Define getValue outside try so it's accessible in catch block
+        const getValue = (headerName) => {
+          const idx = headers.findIndex((h) => h === headerName.toLowerCase());
+          return idx !== -1 && row[idx] ? row[idx] : '';
+        };
 
+        try {
           const englishRequirements = [];
           const addEnglishReq = (testName, overallHeader, sectionHeader) => {
              const overall = getValue(overallHeader);
@@ -388,8 +389,8 @@ const AdminAddUniversity = () => {
              if (overall || section) {
                englishRequirements.push({
                  testName,
-                 minOverall: overall ? parseFloat(overall) : '',
-                 minSection: section ? parseFloat(section) : ''
+                 minOverall: overall ? parseFloat(overall) : null,
+                 minSection: section ? parseFloat(section) : null
                });
              }
           };
@@ -401,6 +402,29 @@ const AdminAddUniversity = () => {
           const parseArrayField = (fieldValue) => {
              if (!fieldValue) return [];
              return fieldValue.split(',').map(v => v.trim()).filter(Boolean);
+          };
+
+          // Normalize Yes/No fields to Title Case (schema enum requires 'Yes'/'No')
+          const normalizeYesNo = (val, fallback = 'No') => {
+            if (!val) return fallback;
+            const lower = val.trim().toLowerCase();
+            if (lower === 'yes') return 'Yes';
+            if (lower === 'no') return 'No';
+            return fallback;
+          };
+
+          // Clean tuition fee: remove commas and non-numeric chars (except decimal point)
+          const cleanFee = (feeStr) => {
+            if (!feeStr) return '';
+            // Remove commas from values like "19,950" → "19950"
+            return feeStr.replace(/,/g, '').trim();
+          };
+
+          // Safely parse integer, return null (not '') for empty values to avoid Mongoose CastError
+          const safeParseInt = (val) => {
+            if (!val || val.trim() === '') return null;
+            const parsed = parseInt(val, 10);
+            return isNaN(parsed) ? null : parsed;
           };
 
           const payload = {
@@ -415,14 +439,14 @@ const AdminAddUniversity = () => {
             courseLevel: getValue('courseLevel'),
             fieldOfStudy: getValue('fieldOfStudy'),
             duration: getValue('duration'),
-            tuitionFee: getValue('tuitionFee'),
+            tuitionFee: cleanFee(getValue('tuitionFee')),
             intakes: parseArrayField(getValue('intakes')),
             minCgpa: getValue('minCgpa'),
-            maxBacklogs: getValue('maxBacklogs') ? parseInt(getValue('maxBacklogs')) : '',
-            gapAccepted: getValue('gapAccepted') || 'No',
-            gapLimit: getValue('gapLimit') ? parseInt(getValue('gapLimit')) : '',
+            maxBacklogs: safeParseInt(getValue('maxBacklogs')),
+            gapAccepted: normalizeYesNo(getValue('gapAccepted'), 'No'),
+            gapLimit: safeParseInt(getValue('gapLimit')),
             englishRequirements,
-            acceptsMOI: getValue('acceptsMOI') || 'No',
+            acceptsMOI: normalizeYesNo(getValue('acceptsMOI'), 'No'),
             casPriority: getValue('casPriority') || 'Medium',
             internalProcessing: getValue('internalProcessing') || 'No',
             appFee: getValue('appFee') || 'Free Waiver',
@@ -433,12 +457,17 @@ const AdminAddUniversity = () => {
           await axios.post('/api/universities', payload, config);
           successCount++;
         } catch (err) {
-          console.error('Failed to add university from row:', row, err.response?.data?.message || err.message);
+          const errMsg = err.response?.data?.message || err.message;
+          console.error('Failed to add university from row:', getValue('courseName'), '-', errMsg, row);
           failCount++;
         }
       }
 
-      alert(`CSV Upload Complete!\nSuccessfully added: ${successCount}\nFailed: ${failCount}`);
+      if (failCount > 0) {
+        alert(`CSV Upload Complete!\nSuccessfully added: ${successCount}\nFailed: ${failCount}\n\nCheck browser console (F12) for details on failed rows.`);
+      } else {
+        alert(`✅ CSV Upload Complete! Successfully added ${successCount} programs.`);
+      }
     } catch (err) {
       console.error('Error processing CSV:', err);
       alert('Error extracting data from CSV file. Please check the format.');
