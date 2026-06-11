@@ -703,25 +703,13 @@ const CollegeSearch = () => {
       const user = JSON.parse(userString);
 
       const isProfileComplete = (() => {
-        if (!user.personalInfo || !user.address || !user.education || !user.testScores) return false;
+        // Simple check to ensure the user has populated their profile.
+        // We rely on the ProfileUpdate component to enforce strict field-level validation.
+        if (!user.personalInfo || !user.personalInfo.firstName) return false;
+        if (!user.address || !user.address.street) return false;
+        if (!user.education || user.education.length === 0 || !user.education[0].schoolName) return false;
+        if (!user.testScores || !user.testScores.englishProficiency) return false;
         
-        const p = user.personalInfo;
-        // Require essentially all personal fields (middleName is often optional so we skip it)
-        if (!p.firstName || !p.lastName || !p.dob || !p.firstLanguage || !p.citizenship || !p.maritalStatus || !p.gender) return false;
-        if (!p.passport || !p.passport.number || !p.passport.expiryDate || !p.passport.placeOfBirth) return false;
-
-        const a = user.address;
-        // Require all address fields
-        if (!a.street || !a.city || !a.state || !a.country || !a.zipCode || !a.phone) return false;
-
-        // Require at least one fully formed education record
-        if (user.education.length === 0) return false;
-        const edu = user.education[0];
-        if (!edu.schoolName || !edu.country || !edu.level || !edu.gradingScheme || !edu.score || !edu.language || !edu.attendedFrom || !edu.attendedTo || !edu.degreeName) return false;
-
-        // Require English proficiency status
-        if (!user.testScores.englishProficiency) return false;
-
         return true;
       })();
 
