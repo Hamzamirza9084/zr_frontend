@@ -1,6 +1,5 @@
 @import "tailwindcss";
-/* Import Google Fonts for the new theme */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700;0,900;1,400&display=swap');
+/* Google Fonts are loaded non-blockingly from index.html */
 
 @theme {
   --color-primary: #CCA34A;

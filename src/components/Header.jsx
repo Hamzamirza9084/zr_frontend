@@ -33,11 +33,16 @@ const Header = () => {
 
         {/* Logo Section */}
         <Link to="/" className="flex items-center gap-3 text-emerald-600 group">
-          <img
-            src="/Images/svglogo.svg"
-            alt="Anvora Logo"
-            className="size-13 object-contain group-hover:scale-110 transition-transform"
-          />
+          <picture>
+            <source srcSet="/Images/svglogo-64.webp" type="image/webp" />
+            <img
+              src="/Images/svglogo.svg"
+              alt="Anvora Logo"
+              width="52"
+              height="52"
+              className="size-13 object-contain group-hover:scale-110 transition-transform"
+            />
+          </picture>
         </Link>
 
         {/* Navigation - Main "Finder" Link */}

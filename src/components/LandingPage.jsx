@@ -56,13 +56,19 @@ const LandingPage = () => {
               transition={{ duration: 0.8, delay: 0.2 }}
               className="lg:col-span-6 mt-12 lg:mt-0 relative"
             >
-              {/* Plain hero image — removed rounded container, shadow, and dark overlay */}
+              {/* Plain hero image — optimized with WebP + width/height for CLS */}
               <div className="relative">
-                <img
-                  src="/Images/royal.png"
-                  alt="Students studying"
-                  className="w-full h-auto object-contain transform hover:scale-105 transition-transform duration-700"
-                />
+                <picture>
+                  <source srcSet="/Images/royal.webp" type="image/webp" />
+                  <img
+                    src="/Images/royal-optimized.jpg"
+                    alt="Students studying abroad with Anvora platform"
+                    width="800"
+                    height="600"
+                    fetchpriority="high"
+                    className="w-full h-auto object-contain transform hover:scale-105 transition-transform duration-700"
+                  />
+                </picture>
               </div>
               
               {/* Floating Badge Example */}
