@@ -11,6 +11,76 @@
   
   --font-display: "Merriweather", serif;
   --font-body: "Inter", sans-serif;
+
+  /* shadcn/ui radius token */
+  --radius: 0.75rem;
+}
+
+/* ── shadcn/ui CSS custom properties (Anvora branded) ── */
+:root {
+  --background: 43 100% 99%;       /* #FDFBF7 off-white */
+  --foreground: 160 67% 18%;       /* #0F4C3A deep-green */
+
+  --card: 0 0% 100%;
+  --card-foreground: 160 67% 18%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 160 67% 18%;
+
+  --primary: 41 55% 55%;           /* #CCA34A gold */
+  --primary-foreground: 160 67% 18%;
+
+  --secondary: 140 43% 92%;        /* #E6F4EA light-green */
+  --secondary-foreground: 160 67% 18%;
+
+  --muted: 140 43% 92%;
+  --muted-foreground: 160 30% 40%;
+
+  --accent: 140 43% 92%;
+  --accent-foreground: 160 67% 18%;
+
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 160 20% 88%;
+  --input: 160 20% 88%;
+  --ring: 41 55% 55%;
+
+  --chart-1: 41 55% 55%;
+  --chart-2: 160 67% 18%;
+  --chart-3: 140 43% 70%;
+  --chart-4: 41 55% 70%;
+  --chart-5: 160 40% 40%;
+}
+
+.dark {
+  --background: 160 67% 18%;
+  --foreground: 40 50% 98%;
+
+  --card: 160 50% 14%;
+  --card-foreground: 40 50% 98%;
+
+  --popover: 160 50% 14%;
+  --popover-foreground: 40 50% 98%;
+
+  --primary: 41 55% 55%;
+  --primary-foreground: 160 67% 18%;
+
+  --secondary: 160 40% 25%;
+  --secondary-foreground: 40 50% 98%;
+
+  --muted: 160 40% 25%;
+  --muted-foreground: 160 20% 65%;
+
+  --accent: 160 40% 25%;
+  --accent-foreground: 40 50% 98%;
+
+  --destructive: 0 62% 50%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 160 30% 25%;
+  --input: 160 30% 25%;
+  --ring: 41 55% 55%;
 }
 
 html {

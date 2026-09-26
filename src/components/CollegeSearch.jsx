@@ -1,7 +1,14 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { selectUser, selectUserToken } from '../store/authSlice';
 import axios from 'axios';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Badge } from './ui/badge';
+import { Label } from './ui/label';
+import { UniversityGridSkeleton } from './Skeletons';
 
 // --- Utility Functions ---
 
@@ -63,22 +70,23 @@ const FIELD_OF_STUDIES = [
 
 // --- COMPONENTS ---
 
-const StyledInput = ({ label, type = "text", placeholder, className, value, onChange, name, ...props }) => (
+const StyledInput = React.memo(({ label, type = "text", placeholder, className, value, onChange, name, ...props }) => (
   <div className={`flex flex-col gap-1.5 ${className}`}>
-    {label && <label className="text-xs font-bold text-deep-green/80 ml-1 uppercase tracking-wide">{label}</label>}
-    <input
+    {label && <Label className="text-xs ml-1 uppercase tracking-wide">{label}</Label>}
+    <Input
       type={type}
       name={name}
       value={value}
       onChange={onChange}
-      className="w-full px-4 py-2.5 rounded-xl border-2 border-light-green bg-white text-deep-green placeholder:text-deep-green/30 focus:outline-none focus:border-deep-green focus:ring-0 transition-colors text-sm font-medium"
+      className="h-10 text-sm"
       placeholder={placeholder}
       {...props}
     />
   </div>
-);
+));
+StyledInput.displayName = 'StyledInput';
 
-const StyledSelect = ({ label, options, value, onChange, name, ...props }) => (
+const StyledSelect = React.memo(({ label, options, value, onChange, name, ...props }) => (
   <div className="flex flex-col gap-1.5">
     {label && <label className="text-xs font-bold text-deep-green/80 ml-1 uppercase tracking-wide">{label}</label>}
     <div className="relative">
@@ -96,7 +104,8 @@ const StyledSelect = ({ label, options, value, onChange, name, ...props }) => (
       </span>
     </div>
   </div>
-);
+));
+StyledSelect.displayName = 'StyledSelect';
 
 const FilterSection = ({ title, icon, children, defaultOpen = false }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -140,7 +149,7 @@ const FilterSection = ({ title, icon, children, defaultOpen = false }) => {
 };
 
 // Extracted Filter Content to reuse in Mobile Drawer and Desktop Sidebar
-const FilterContent = ({ formData, handleChange, setFormData, handleEvaluate, institutions = [], destinations = [], cities = [], programLevels = [], fieldOfStudies = [] }) => {
+const FilterContent = React.memo(({ formData, handleChange, setFormData, handleEvaluate, institutions = [], destinations = [], cities = [], programLevels = [], fieldOfStudies = [] }) => {
   return (
     <div className="space-y-4">
       {/* 6. Program Filters */}
@@ -304,13 +313,16 @@ const FilterContent = ({ formData, handleChange, setFormData, handleEvaluate, in
 
     </div>
   );
-};
+});
+FilterContent.displayName = 'FilterContent';
 
 
 // --- MAIN PAGE COMPONENT ---
 
 const CollegeSearch = () => {
   const navigate = useNavigate();
+  const user = useSelector(selectUser);
+  const token = useSelector(selectUserToken);
   const [showMobileFilters, setShowMobileFilters] = useState(false); // State for mobile drawer
 
   // Filter State
@@ -365,15 +377,15 @@ const CollegeSearch = () => {
 
   const [colleges, setColleges] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
-  const [filteredColleges, setFilteredColleges] = useState([]);
   const [savedColleges, setSavedColleges] = useState([]);
   const [showSavedOnly, setShowSavedOnly] = useState(false);
 
   // Pagination states
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [totalResultsCount, setTotalResultsCount] = useState(0);
 
   // Filter metadata state
@@ -385,7 +397,23 @@ const CollegeSearch = () => {
     fieldsOfStudy: []
   });
 
-  const loaderRef = React.useRef(null);
+  const mainScrollRef = useRef(null);
+  const pageRef = useRef(page);
+  const hasMoreRef = useRef(hasMore);
+  const isFetchingRef = useRef(false);
+  const formDataRef = useRef(formData);
+
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
+
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
 
   // Fetch filter metadata on mount
   useEffect(() => {
@@ -400,9 +428,12 @@ const CollegeSearch = () => {
     fetchMeta();
   }, []);
 
-  const fetchColleges = async (pageNumber = 1, append = false, currentFormData = formData, savedIds = null) => {
+  const fetchColleges = useCallback(async (pageNumber = 1, append = false, currentFormData = formDataRef.current, savedIds = null) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
     try {
-      if (pageNumber === 1) {
+      if (!append) {
         setLoading(true);
       } else {
         setLoadingMore(true);
@@ -468,93 +499,102 @@ const CollegeSearch = () => {
       }
 
       const { data } = await axios.get(`/api/universities?${params.toString()}`);
+      const newItems = data.data || [];
       
       if (append) {
-        setColleges(prev => [...prev, ...data.data]);
-        setFilteredColleges(prev => [...prev, ...data.data]);
+        setColleges(prev => {
+          const existingIds = new Set(prev.map(c => c._id));
+          const deduplicated = newItems.filter(c => c._id && !existingIds.has(c._id));
+          return [...prev, ...deduplicated];
+        });
       } else {
-        setColleges(data.data);
-        setFilteredColleges(data.data);
+        setColleges(newItems);
       }
 
-      setPage(data.page);
-      setHasMore(data.hasMore);
-      setTotalResultsCount(data.totalCount);
-      setLoading(false);
-      setLoadingMore(false);
+      setPage(data.page || pageNumber);
+      setTotalPages(data.totalPages || Math.ceil((data.totalCount || 0) / 30) || 1);
+      setHasMore(Boolean(data.hasMore));
+      setTotalResultsCount(data.totalCount || 0);
+      setError(null);
     } catch (err) {
-      console.error(err);
+      console.error("Failed to load universities:", err);
       setError("Failed to load universities.");
+    } finally {
       setLoading(false);
       setLoadingMore(false);
+      isFetchingRef.current = false;
     }
-  };
+  }, []);
 
+  // Fetch saved colleges on mount (does not trigger colleges refetch)
   useEffect(() => {
     const fetchSaved = async () => {
       try {
-        const userString = localStorage.getItem('user');
-        if (!userString) return;
-        const user = JSON.parse(userString);
-        if (!user.token) return;
-        const config = { headers: { Authorization: `Bearer ${user.token}` } };
+        if (!token) return;
+        const config = { headers: { Authorization: `Bearer ${token}` } };
         const { data } = await axios.get('/api/auth/saved-colleges', config);
-        setSavedColleges(data);
+        setSavedColleges(data || []);
       } catch (err) {
         console.error("Failed to fetch saved colleges:", err);
       }
     };
     fetchSaved();
-  }, []);
+  }, [token]);
 
-  // Sync colleges list when showSavedOnly or savedColleges changes
+  // Initial fetch on mount
+  useEffect(() => {
+    fetchColleges(1, false, formData);
+  }, [fetchColleges]);
+
+  // Sync colleges list strictly when showSavedOnly mode changes
   useEffect(() => {
     if (showSavedOnly) {
       if (savedColleges.length > 0) {
-        fetchColleges(1, false, formData, savedColleges);
+        fetchColleges(1, false, formDataRef.current, savedColleges);
       } else {
         setColleges([]);
-        setFilteredColleges([]);
         setTotalResultsCount(0);
+        setTotalPages(1);
         setHasMore(false);
         setLoading(false);
       }
     } else {
-      fetchColleges(1, false, formData);
+      fetchColleges(1, false, formDataRef.current);
     }
-  }, [showSavedOnly, savedColleges]);
+  }, [showSavedOnly, fetchColleges]);
 
-  // Infinite Scroll Intersection Observer
-  useEffect(() => {
-    if (loading || loadingMore || !hasMore || showSavedOnly) return;
-
-    const observer = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting) {
-        fetchColleges(page + 1, true, formData);
-      }
-    }, { threshold: 0.5 });
-
-    if (loaderRef.current) {
-      observer.observe(loaderRef.current);
+  // Handle explicit page change navigation
+  const handlePageChange = useCallback((newPage) => {
+    if (newPage < 1 || newPage > totalPages || newPage === page || loading) return;
+    fetchColleges(newPage, false, formData);
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  }, [totalPages, page, loading, fetchColleges, formData]);
 
-    return () => {
-      if (loaderRef.current) {
-        observer.unobserve(loaderRef.current);
-      }
-    };
-  }, [loading, loadingMore, hasMore, page, formData, showSavedOnly]);
+  // Generate pagination buttons with smart ellipsis
+  const paginationItems = useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    if (page <= 4) {
+      return [1, 2, 3, 4, 5, '...', totalPages];
+    }
+    if (page >= totalPages - 3) {
+      return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    }
+    return [1, '...', page - 1, page, page + 1, '...', totalPages];
+  }, [page, totalPages]);
 
-  const toggleSave = async (collegeId) => {
+  const toggleSave = useCallback(async (collegeId) => {
     try {
-      const userString = localStorage.getItem('user');
-      if (!userString) {
+      if (!token) {
         alert("Please login to save colleges.");
         return;
       }
-      const user = JSON.parse(userString);
-      if (!user.token) return;
-      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      const config = { headers: { Authorization: `Bearer ${token}` } };
       
       // Optimistic UI update
       setSavedColleges(prev => 
@@ -569,58 +609,42 @@ const CollegeSearch = () => {
       console.error("Failed to toggle save:", err);
       alert("Error saving college.");
     }
-  };
+  }, [token]);
 
-  // Auth Check
+  // Auth Check — using Redux state
   useEffect(() => {
-    const checkStudentStatus = () => {
-      const userString = localStorage.getItem('user');
-      if (!userString) {
-        alert("Please login to access this page.");
-        navigate('/login');
-        return;
-      }
-      const user = JSON.parse(userString);
-      // Allow both 'student' and 'user' roles to access
-      if (!user.token || (user.role !== 'student' && user.role !== 'user')) {
-        alert("Access Denied: You must be logged in as a Student to view this page.");
-        navigate('/');
-      }
-    };
-    checkStudentStatus();
-  }, [navigate]);
+    if (!user) {
+      alert("Please login to access this page.");
+      navigate('/login');
+      return;
+    }
+    if (!token || (user.role !== 'student' && user.role !== 'user')) {
+      alert("Access Denied: You must be logged in as a Student to view this page.");
+      navigate('/');
+    }
+  }, [user, token, navigate]);
 
-  // Pre-fill from Profile
+  // Pre-fill from Profile — using Redux state
   useEffect(() => {
-    try {
-      const userString = localStorage.getItem('user');
-      if (userString) {
-        const user = JSON.parse(userString);
-        console.log("Loaded Profile for Search:", user); // Debug log
+    if (user) {
+      setFormData(prev => {
+        const newData = { ...prev };
 
-        setFormData(prev => {
-          const newData = { ...prev };
+        // Safer mapping with optional chaining
+        if (user.personalInfo?.citizenship) newData.nationality = user.personalInfo.citizenship;
+        if (user.education && user.education.length > 0) {
+          const edu = user.education[0]; // Assuming most recent is first
+          if (edu.country) newData.educationCountry = edu.country;
+          if (edu.level) newData.qualification = edu.level;
+          if (edu.grade) newData.cgpa = edu.grade;
+        }
 
-          // Safer mapping with optional chaining
-          if (user.personalInfo?.citizenship) newData.nationality = user.personalInfo.citizenship;
-          if (user.education && user.education.length > 0) {
-            const edu = user.education[0]; // Assuming most recent is first
-            if (edu.country) newData.educationCountry = edu.country;
-            if (edu.level) newData.qualification = edu.level;
-            // Check for grade/cgpa
-            if (edu.grade) newData.cgpa = edu.grade;
-          }
+        return newData;
+      });
+    }
+  }, [user]);
 
-          // Map intended destination if available in profile (e.g. from a preferences field if it existed)
-          // For now, we only map explicit matches.
-
-          return newData;
-        });
-      }
-    } catch (e) { console.error("Error loading profile", e); }
-  }, []);
-
-  const handleChange = (e) => {
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setFormData(prev => {
       const newData = { ...prev, [name]: value };
@@ -636,7 +660,7 @@ const CollegeSearch = () => {
 
       return newData;
     });
-  };
+  }, []);
 
   const handleReset = () => {
     const defaultFormData = {
@@ -692,23 +716,21 @@ const CollegeSearch = () => {
     fetchColleges(1, false, defaultFormData);
   };
 
-  const handleApply = async (universityId) => {
+  const handleApply = useCallback(async (universityId) => {
     try {
-      const userString = localStorage.getItem('user');
-      if (!userString) {
+      if (!token) {
         alert("Please login to apply.");
         navigate('/login');
         return;
       }
-      const user = JSON.parse(userString);
 
       const isProfileComplete = (() => {
         // Simple check to ensure the user has populated their profile.
         // We rely on the ProfileUpdate component to enforce strict field-level validation.
-        if (!user.personalInfo || !user.personalInfo.firstName) return false;
-        if (!user.address || !user.address.street) return false;
-        if (!user.education || user.education.length === 0 || !user.education[0].schoolName) return false;
-        if (!user.testScores || !user.testScores.englishProficiency) return false;
+        if (!user?.personalInfo || !user.personalInfo.firstName) return false;
+        if (!user?.address || !user.address.street) return false;
+        if (!user?.education || user.education.length === 0 || !user.education[0].schoolName) return false;
+        if (!user?.testScores || !user.testScores.englishProficiency) return false;
         
         return true;
       })();
@@ -719,7 +741,7 @@ const CollegeSearch = () => {
       }
 
       const config = {
-        headers: { Authorization: `Bearer ${user.token}` }
+        headers: { Authorization: `Bearer ${token}` }
       };
 
       await axios.post('/api/applications', { universityId }, config);
@@ -728,50 +750,68 @@ const CollegeSearch = () => {
       console.error(error);
       alert(error.response?.data?.message || "Failed to submit application.");
     }
-  };
+  }, [token, user, navigate]);
 
-  const handleEvaluate = () => {
+  const handleEvaluate = useCallback(() => {
     setShowSavedOnly(false);
     fetchColleges(1, false, formData);
     setShowMobileFilters(false);
-  };
+  }, [formData, fetchColleges]);
 
-  const getIcon = (uni) => {
+  const getIcon = useCallback((uni) => {
     if (uni.name?.toLowerCase().includes('college') || uni.courseLevel?.includes('Diploma')) return 'school';
     if (uni.courseName?.toLowerCase().includes('tech')) return 'computer';
     return 'account_balance';
-  };
+  }, []);
 
   // Helper for consistent name normalization
-  const norm = (str) => (str || '').trim();
-  const normLower = (str) => norm(str).toLowerCase();
+  const normLower = useCallback((str) => (str || '').trim().toLowerCase(), []);
 
-  // Derived: unique destination names
-  const availableDestinations = meta.destinations.map(d => d.name).sort();
+  // Derived: unique destination names — useMemo
+  const availableDestinations = useMemo(
+    () => meta.destinations.map(d => d.name).sort(),
+    [meta.destinations]
+  );
 
-  // Derived: unique institutions filtered by selected destination
-  const selectedDestObj = meta.destinations.find(d => normLower(d.name) === normLower(formData.destination));
-  const selectedDestId = selectedDestObj?._id;
+  // Derived: selected destination ID — useMemo
+  const selectedDestId = useMemo(() => {
+    const destObj = meta.destinations.find(d => normLower(d.name) === normLower(formData.destination));
+    return destObj?._id;
+  }, [meta.destinations, formData.destination, normLower]);
 
-  const availableInstitutions = meta.institutions
-    .filter(inst => !selectedDestId || inst.destinationId === selectedDestId)
-    .map(inst => inst.name)
-    .sort();
+  // Derived: unique institutions filtered by destination — useMemo
+  const availableInstitutions = useMemo(
+    () => meta.institutions
+      .filter(inst => !selectedDestId || inst.destinationId === selectedDestId)
+      .map(inst => inst.name)
+      .sort(),
+    [meta.institutions, selectedDestId]
+  );
 
-  // Derived: unique cities filtered by selected destination + institution
-  const availableCities = meta.institutions
-    .filter(inst => {
-      const matchesDest = !selectedDestId || inst.destinationId === selectedDestId;
-      const matchesInst = !formData.institution || normLower(inst.name).includes(normLower(formData.institution));
-      return matchesDest && matchesInst;
-    })
-    .map(inst => inst.city)
-    .filter(Boolean)
-    .filter((v, i, self) => self.indexOf(v) === i) // unique
-    .sort();
+  // Derived: unique cities filtered by destination + institution — useMemo
+  const availableCities = useMemo(
+    () => meta.institutions
+      .filter(inst => {
+        const matchesDest = !selectedDestId || inst.destinationId === selectedDestId;
+        const matchesInst = !formData.institution || normLower(inst.name).includes(normLower(formData.institution));
+        return matchesDest && matchesInst;
+      })
+      .map(inst => inst.city)
+      .filter(Boolean)
+      .filter((v, i, self) => self.indexOf(v) === i)
+      .sort(),
+    [meta.institutions, selectedDestId, formData.institution, normLower]
+  );
 
-  const availableCourseLevels = meta.courseLevels.length > 0 ? meta.courseLevels : PROGRAM_LEVELS;
-  const availableFieldsOfStudy = meta.fieldsOfStudy.length > 0 ? meta.fieldsOfStudy : FIELD_OF_STUDIES;
+  // Derived: course levels and fields of study — useMemo
+  const availableCourseLevels = useMemo(
+    () => meta.courseLevels.length > 0 ? meta.courseLevels : PROGRAM_LEVELS,
+    [meta.courseLevels]
+  );
+  const availableFieldsOfStudy = useMemo(
+    () => meta.fieldsOfStudy.length > 0 ? meta.fieldsOfStudy : FIELD_OF_STUDIES,
+    [meta.fieldsOfStudy]
+  );
 
   return (
     <div className="flex flex-1 h-[calc(100vh-80px)] overflow-hidden bg-off-white font-display relative">
@@ -822,13 +862,13 @@ const CollegeSearch = () => {
               </div>
 
               <div className="p-5 border-t border-deep-green/10 bg-white sticky bottom-0">
-                <button
+                <Button
                   onClick={handleEvaluate}
-                  className="w-full h-12 bg-primary text-deep-green text-sm font-extrabold rounded-xl border border-deep-green shadow-[4px_4px_0px_0px_rgba(52,121,40,1)] active:translate-y-[2px] active:shadow-none transition-all flex items-center justify-center gap-2"
+                  className="w-full h-12"
                 >
                   <span className="material-symbols-outlined">search_check</span>
                   Apply Filters
-                </button>
+                </Button>
               </div>
             </motion.aside>
           </>
@@ -869,18 +909,19 @@ const CollegeSearch = () => {
         </div>
 
         <div className="sticky bottom-0 bg-[#0f4c3a] p-6 border-t border-white/10 backdrop-blur-xl">
-          <button
+          <Button
             onClick={handleEvaluate}
-            className="w-full h-14 bg-primary text-deep-green text-base font-extrabold rounded-xl border border-deep-green shadow-[4px_4px_0px_0px_rgba(52,121,40,1)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(52,121,40,1)] active:translate-y-[4px] active:shadow-none transition-all flex items-center justify-center gap-2"
+            className="w-full h-14 text-base"
+            size="lg"
           >
             <span className="material-symbols-outlined">search_check</span>
             Evaluate Profile
-          </button>
+          </Button>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-6 md:p-12 relative bg-[#0f4c3a] custom-scrollbar">
+      <main ref={mainScrollRef} className="flex-1 overflow-y-auto p-6 md:p-12 relative bg-[#0f4c3a] custom-scrollbar">
         <div className="max-w-6xl mx-auto">
 
           {/* Header */}
@@ -922,30 +963,29 @@ const CollegeSearch = () => {
             </div>
           )}
 
-          {/* Loading State */}
+          {/* Loading State — Skeleton Cards during initial fetch or page transition */}
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <span className="material-symbols-outlined text-4xl text-white/70 animate-spin">refresh</span>
-            </div>
+            <UniversityGridSkeleton count={6} />
           ) : (
             <>
-              {/* Grid */}
-              <motion.div
-                key={filteredColleges.map(c => c._id).join(',') + `-saved-${showSavedOnly}`}
-                className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
-                initial="hidden"
-                animate="show"
-                variants={{
-                  hidden: { opacity: 0 },
-                  show: {
-                    opacity: 1,
-                    transition: { staggerChildren: 0.1 }
-                  }
-                }}
-              >
-                {filteredColleges.map((college, idx) => (
-                  <motion.div
-                    key={college._id || idx}
+              {/* Grid or Empty State */}
+              {colleges.length > 0 ? (
+                <motion.div
+                  key={showSavedOnly ? 'saved' : 'all'}
+                  className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
+                  initial="hidden"
+                  animate="show"
+                  variants={{
+                    hidden: { opacity: 0 },
+                    show: {
+                      opacity: 1,
+                      transition: { staggerChildren: 0.05 }
+                    }
+                  }}
+                >
+                  {colleges.map((college, idx) => (
+                    <motion.div
+                      key={college._id || `college-${idx}`}
                     variants={{
                       hidden: { opacity: 0, y: 20 },
                       show: { opacity: 1, y: 0 }
@@ -987,12 +1027,12 @@ const CollegeSearch = () => {
                     {college.tags && college.tags.length > 0 && (
                       <div className="px-6 pb-4 flex flex-wrap gap-2">
                         {college.tags.slice(0, 3).map((tag, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0f4c3a] bg-[#0f4c3a]/5 px-2.5 py-1 rounded-full border border-[#0f4c3a]/10">
+                          <Badge key={i} variant="secondary" className="text-[11px] bg-[#0f4c3a]/5 text-[#0f4c3a] border-[#0f4c3a]/10 gap-1">
                             <span className="material-symbols-outlined text-[13px] text-[#0f4c3a]/60">
                               {tag.includes('Scholarship') ? 'school' : tag.includes('Demand') ? 'trending_up' : 'verified'}
                             </span>
                             {tag}
-                          </span>
+                          </Badge>
                         ))}
                       </div>
                     )}
@@ -1042,7 +1082,7 @@ const CollegeSearch = () => {
                         </div>
                         <div>
                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Tuition (1st yr)</p>
-                          <p className="text-base font-extrabold text-gray-900">{college.tuitionFee ? `${getCurrencySymbol(college.institutionId?.destinationId?.name || college.country)}${Number(college.tuitionFee).toLocaleString('en-IN')}` : "N/A"}</p>
+                          <p className="text-base font-extrabold text-gray-900">{college.tuitionFee ? `${college.currency || '$'}${Number(college.tuitionFee).toLocaleString('en-IN')}` : "N/A"}</p>
                         </div>
                       </div>
                     </div>
@@ -1075,13 +1115,13 @@ const CollegeSearch = () => {
 
                     {/* Action Buttons */}
                     <div className="px-6 py-5 flex gap-3 items-center mt-auto border-t border-gray-100">
-                      <button
+                      <Button
                         onClick={() => handleApply(college._id)}
-                        className="flex-1 py-3 bg-primary text-deep-green font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-md hover:brightness-90 active:scale-[0.98]"
+                        className="flex-1 py-3"
                       >
                         Apply Now
                         <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-                      </button>
+                      </Button>
                       <button
                         onClick={() => toggleSave(college._id)}
                         className={`transition-all duration-200 p-2.5 rounded-xl border ${savedColleges.includes(college._id) ? 'border-pink-200 bg-pink-50 text-pink-500' : 'border-gray-200 bg-gray-50 text-gray-400 hover:text-pink-400 hover:border-pink-200 hover:bg-pink-50'}`}
@@ -1094,15 +1134,88 @@ const CollegeSearch = () => {
                   </motion.div>
                 ))}
               </motion.div>
-
-              {/* Infinite Scroll Loader Sentinel */}
-              {hasMore && !showSavedOnly && (
-                <div ref={loaderRef} className="flex justify-center items-center py-10 mt-6">
-                  <span className="material-symbols-outlined text-4xl text-white/70 animate-spin">refresh</span>
+            ) : (
+              !loading && (
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-12 text-center text-white border border-white/20">
+                  <span className="material-symbols-outlined text-5xl mb-3 text-white/60">search_off</span>
+                  <h3 className="text-xl font-bold">No programs match your criteria</h3>
+                  <p className="text-white/70 text-sm mt-1 max-w-md mx-auto">
+                    Try adjusting your search filters or resetting them to view more universities.
+                  </p>
                 </div>
-              )}
-            </>
-          )}
+              )
+            )}
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && !showSavedOnly && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-8 mt-8 border-t border-white/15">
+                {/* Results Summary */}
+                <div className="text-sm font-semibold text-white/80">
+                  Showing page <span className="font-extrabold text-white">{page}</span> of{' '}
+                  <span className="font-extrabold text-white">{totalPages}</span>
+                  <span className="text-white/60 ml-1.5 font-normal">
+                    ({totalResultsCount} total programs)
+                  </span>
+                </div>
+
+                {/* Page Navigation Buttons */}
+                <div className="flex items-center gap-1.5 bg-black/25 p-1.5 rounded-2xl border border-white/10 backdrop-blur-md shadow-lg">
+                  {/* Previous Button */}
+                  <button
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page <= 1 || loading}
+                    className="flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-bold text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10 active:scale-95 cursor-pointer"
+                    title="Previous Page"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                    <span className="hidden sm:inline">Prev</span>
+                  </button>
+
+                  {/* Page Numbers */}
+                  {paginationItems.map((item, index) => {
+                    if (item === '...') {
+                      return (
+                        <span
+                          key={`ellipsis-${index}`}
+                          className="px-2 text-white/40 font-bold select-none text-sm"
+                        >
+                          …
+                        </span>
+                      );
+                    }
+
+                    const isCurrent = item === page;
+                    return (
+                      <button
+                        key={`page-${item}`}
+                        onClick={() => handlePageChange(item)}
+                        disabled={loading}
+                        className={`min-w-[36px] h-[36px] flex items-center justify-center rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer ${
+                          isCurrent
+                            ? 'bg-emerald-400 text-[#0f4c3a] shadow-md font-black ring-2 ring-emerald-300/40'
+                            : 'text-white/80 hover:text-white hover:bg-white/10'
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    );
+                  })}
+
+                  {/* Next Button */}
+                  <button
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page >= totalPages || loading}
+                    className="flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-bold text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10 active:scale-95 cursor-pointer"
+                    title="Next Page"
+                  >
+                    <span className="hidden sm:inline">Next</span>
+                    <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
         </div>
       </main>
     </div>

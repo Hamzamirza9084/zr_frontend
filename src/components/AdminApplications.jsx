@@ -1,24 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { selectUser, selectUserToken } from '../store/authSlice';
+import { AdminTableSkeleton } from './Skeletons';
 
 const AdminApplications = () => {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const user = useSelector(selectUser);
+  const token = useSelector(selectUserToken);
 
   useEffect(() => {
     const fetchApplications = async () => {
       try {
-        const user = JSON.parse(localStorage.getItem('user'));
         if (!user || user.role !== 'admin') {
           navigate('/login');
           return;
         }
 
         const config = {
-          headers: { Authorization: `Bearer ${user.token}` },
+          headers: { Authorization: `Bearer ${token}` },
         };
 
         const { data } = await axios.get('/api/applications', config);
@@ -31,13 +35,12 @@ const AdminApplications = () => {
     };
 
     fetchApplications();
-  }, [navigate]);
+  }, [navigate, user, token]);
 
-  const updateStatus = async (id, newStatus) => {
+  const updateStatus = useCallback(async (id, newStatus) => {
     try {
-      const user = JSON.parse(localStorage.getItem('user'));
       const config = {
-        headers: { Authorization: `Bearer ${user.token}` },
+        headers: { Authorization: `Bearer ${token}` },
       };
 
       await axios.put(`/api/applications/${id}`, { status: newStatus }, config);
@@ -49,9 +52,9 @@ const AdminApplications = () => {
     } catch (err) {
       alert(err.response?.data?.message || "Failed to update status");
     }
-  };
+  }, [token]);
 
-  if (loading) return <div className="text-center mt-10 font-bold text-deep-green">Loading...</div>;
+  if (loading) return <AdminTableSkeleton />;
   if (error) return <div className="text-center mt-10 text-red-500 font-bold">{error}</div>;
 
   return (

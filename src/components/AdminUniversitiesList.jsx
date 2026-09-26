@@ -1,14 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion } from 'framer-motion';
+import { useSelector } from 'react-redux';
+import { selectUser, selectUserToken } from '../store/authSlice';
+import { AdminUniversitiesListSkeleton } from './Skeletons';
 
 const AdminUniversitiesList = () => {
     const [universities, setUniversities] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [tableLoading, setTableLoading] = useState(false);
     const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const navigate = useNavigate();
+    const user = useSelector(selectUser);
+    const token = useSelector(selectUserToken);
 
     // Cascading filter state
     const [selectedDestination, setSelectedDestination] = useState('');
@@ -17,8 +24,9 @@ const AdminUniversitiesList = () => {
 
     // Pagination states
     const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [limit, setLimit] = useState(50);
     const [hasMore, setHasMore] = useState(true);
-    const [loadingMore, setLoadingMore] = useState(false);
     const [totalResultsCount, setTotalResultsCount] = useState(0);
 
     const [meta, setMeta] = useState({
@@ -27,24 +35,20 @@ const AdminUniversitiesList = () => {
         cities: []
     });
 
-    const loaderRef = React.useRef(null);
+    // Debounce search input by 350ms to prevent barrage of requests while typing
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchTerm);
+        }, 350);
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
 
     // Auth check on mount
     useEffect(() => {
-        const checkAdmin = () => {
-            const userString = localStorage.getItem('user');
-            if (!userString) {
-                navigate('/login');
-                return;
-            }
-            const user = JSON.parse(userString);
-            if (!user.token || user.role !== 'admin') {
-                navigate('/');
-                return;
-            }
-        };
-        checkAdmin();
-    }, [navigate]);
+        if (!user || !token || user.role !== 'admin') {
+            navigate(user ? '/' : '/login');
+        }
+    }, [user, token, navigate]);
 
     // Fetch filter metadata on mount
     useEffect(() => {
@@ -59,96 +63,100 @@ const AdminUniversitiesList = () => {
         fetchMeta();
     }, []);
 
-    const fetchUniversities = async (pageNumber = 1, append = false, filters = {}) => {
+    const fetchUniversities = async (pageNumber = 1, currentLimit = limit, filters = {}) => {
         try {
-            if (pageNumber === 1) {
-                setLoading(true);
-            } else {
-                setLoadingMore(true);
-            }
+            setTableLoading(true);
 
             const params = new URLSearchParams();
             params.append('page', pageNumber);
-            params.append('limit', 50);
+            params.append('limit', currentLimit);
 
-            if (filters.destination) params.append('destination', filters.destination);
-            if (filters.institution) params.append('institution', filters.institution);
-            if (filters.city) params.append('city', filters.city);
-            if (filters.search) params.append('search', filters.search);
+            const dest = filters.destination !== undefined ? filters.destination : selectedDestination;
+            const inst = filters.institution !== undefined ? filters.institution : selectedInstitution;
+            const city = filters.city !== undefined ? filters.city : selectedCity;
+            const search = filters.search !== undefined ? filters.search : debouncedSearch;
+
+            if (dest) params.append('destination', dest);
+            if (inst) params.append('institution', inst);
+            if (city) params.append('city', city);
+            if (search) params.append('search', search);
 
             const { data } = await axios.get(`/api/universities?${params.toString()}`);
 
-            if (append) {
-                setUniversities(prev => [...prev, ...data.data]);
-            } else {
-                setUniversities(data.data);
-            }
-
-            setPage(data.page);
-            setHasMore(data.hasMore);
-            setTotalResultsCount(data.totalCount);
-            setLoading(false);
-            setLoadingMore(false);
+            setUniversities(data.data || []);
+            setPage(data.page || pageNumber);
+            setTotalPages(data.totalPages || Math.ceil((data.totalCount || 0) / currentLimit) || 1);
+            setTotalResultsCount(data.totalCount || 0);
+            setHasMore(Boolean(data.hasMore));
         } catch (err) {
             console.error(err);
             setError("Failed to load universities.");
-            setLoading(false);
-            setLoadingMore(false);
+        } finally {
+            setInitialLoading(false);
+            setTableLoading(false);
         }
     };
 
     // Trigger fetch whenever filters change
     useEffect(() => {
-        fetchUniversities(1, false, {
+        fetchUniversities(1, limit, {
             destination: selectedDestination,
             institution: selectedInstitution,
             city: selectedCity,
-            search: searchTerm
+            search: debouncedSearch
         });
-    }, [selectedDestination, selectedInstitution, selectedCity, searchTerm]);
+    }, [selectedDestination, selectedInstitution, selectedCity, debouncedSearch]);
 
-    // Infinite Scroll Intersection Observer
-    useEffect(() => {
-        if (loading || loadingMore || !hasMore) return;
+    const handlePageChange = (newPage) => {
+        if (newPage < 1 || newPage > totalPages || newPage === page || tableLoading) return;
+        fetchUniversities(newPage, limit, {
+            destination: selectedDestination,
+            institution: selectedInstitution,
+            city: selectedCity,
+            search: debouncedSearch
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
 
-        const observer = new IntersectionObserver(entries => {
-            if (entries[0].isIntersecting) {
-                fetchUniversities(page + 1, true, {
-                    destination: selectedDestination,
-                    institution: selectedInstitution,
-                    city: selectedCity,
-                    search: searchTerm
-                });
-            }
-        }, { threshold: 0.5 });
+    const handleLimitChange = (newLimit) => {
+        setLimit(newLimit);
+        fetchUniversities(1, newLimit, {
+            destination: selectedDestination,
+            institution: selectedInstitution,
+            city: selectedCity,
+            search: debouncedSearch
+        });
+    };
 
-        if (loaderRef.current) {
-            observer.observe(loaderRef.current);
+    const paginationItems = useMemo(() => {
+        if (totalPages <= 7) {
+            return Array.from({ length: totalPages }, (_, i) => i + 1);
         }
-
-        return () => {
-            if (loaderRef.current) {
-                observer.unobserve(loaderRef.current);
-            }
-        };
-    }, [loading, loadingMore, hasMore, page, selectedDestination, selectedInstitution, selectedCity, searchTerm]);
+        if (page <= 4) {
+            return [1, 2, 3, 4, 5, '...', totalPages];
+        }
+        if (page >= totalPages - 3) {
+            return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+        }
+        return [1, '...', page - 1, page, page + 1, '...', totalPages];
+    }, [page, totalPages]);
 
     // Helper for consistent name normalization
     const norm = (str) => (str || '').trim();
     const normLower = (str) => norm(str).toLowerCase();
 
     // Derived lists from meta
-    const availableDestinations = meta.destinations.map(d => d.name).sort();
+    const availableDestinations = (meta?.destinations || []).map(d => d.name).sort();
 
-    const selectedDestObj = meta.destinations.find(d => normLower(d.name) === normLower(selectedDestination));
+    const selectedDestObj = (meta?.destinations || []).find(d => normLower(d.name) === normLower(selectedDestination));
     const selectedDestId = selectedDestObj?._id;
 
-    const availableInstitutions = meta.institutions
+    const availableInstitutions = (meta?.institutions || [])
         .filter(inst => !selectedDestId || inst.destinationId === selectedDestId)
         .map(inst => inst.name)
         .sort();
 
-    const availableCities = meta.institutions
+    const availableCities = (meta?.institutions || [])
         .filter(inst => {
             const matchesDest = !selectedDestId || inst.destinationId === selectedDestId;
             const matchesInst = !selectedInstitution || normLower(inst.name).includes(normLower(selectedInstitution));
@@ -159,15 +167,14 @@ const AdminUniversitiesList = () => {
         .filter((v, i, self) => self.indexOf(v) === i) // unique
         .sort();
 
-    const handleDelete = async (id) => {
+    const handleDelete = useCallback(async (id) => {
         if (!window.confirm("Are you sure you want to delete this university/program? This cannot be undone.")) {
             return;
         }
 
         try {
-            const user = JSON.parse(localStorage.getItem('user'));
             const config = {
-                headers: { Authorization: `Bearer ${user.token}` }
+                headers: { Authorization: `Bearer ${token}` }
             };
 
             await axios.delete(`/api/universities/${id}`, config);
@@ -180,7 +187,7 @@ const AdminUniversitiesList = () => {
             console.error(err);
             alert(err.response?.data?.message || "Failed to delete university.");
         }
-    };
+    }, [token, universities]);
 
     const handleClearFilters = () => {
         setSelectedDestination('');
@@ -191,11 +198,7 @@ const AdminUniversitiesList = () => {
 
     const hasActiveFilters = selectedDestination || selectedInstitution || selectedCity || searchTerm;
 
-    if (loading && page === 1) return (
-        <div className="flex justify-center items-center h-screen bg-transparent">
-            <span className="material-symbols-outlined text-4xl text-white animate-spin">refresh</span>
-        </div>
-    );
+    if (initialLoading) return <AdminUniversitiesListSkeleton />;
 
     if (error) return (
         <div className="flex justify-center items-center h-screen bg-transparent">
@@ -217,7 +220,11 @@ const AdminUniversitiesList = () => {
                         </div>
                         <div>
                             <h1 className="text-2xl font-extrabold text-deep-green tracking-tight">
-                                Manage Universities <span className="text-lg bg-light-green text-deep-green px-2 py-1 rounded-xl ml-2 inline-block -translate-y-0.5">{totalResultsCount} Total</span>
+                                Manage Universities 
+                                <span className="text-lg bg-light-green text-deep-green px-2.5 py-1 rounded-xl ml-2 inline-flex items-center gap-1.5 -translate-y-0.5">
+                                    {tableLoading && <span className="material-symbols-outlined text-[16px] animate-spin">refresh</span>}
+                                    {totalResultsCount} Total
+                                </span>
                             </h1>
                             <p className="text-deep-green/60 text-sm font-bold mt-1">View, edit, or remove programs from the system.</p>
                         </div>
@@ -329,13 +336,25 @@ const AdminUniversitiesList = () => {
                                     Search
                                 </span>
                             </label>
-                            <input
-                                type="text"
-                                placeholder="Search courses..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full px-4 py-2.5 rounded-xl border-2 border-light-green bg-white text-deep-green placeholder:text-deep-green/30 focus:outline-none focus:border-deep-green transition-colors text-sm font-medium"
-                            />
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="Search courses, institutions..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full pl-4 pr-10 py-2.5 rounded-xl border-2 border-light-green bg-white text-deep-green placeholder:text-deep-green/30 focus:outline-none focus:border-deep-green transition-colors text-sm font-medium"
+                                />
+                                {searchTerm && (
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setSearchTerm('')} 
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-deep-green/40 hover:text-deep-green transition-colors cursor-pointer"
+                                        title="Clear search"
+                                    >
+                                        <span className="material-symbols-outlined text-[16px]">close</span>
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -377,7 +396,17 @@ const AdminUniversitiesList = () => {
                 </div>
 
                 {/* Programs Table */}
-                <div className="bg-white rounded-3xl border-2 border-light-green/50 shadow-xl overflow-hidden">
+                <div className="bg-white rounded-3xl border-2 border-light-green/50 shadow-xl overflow-hidden relative min-h-[350px]">
+                    {/* In-table smooth loading overlay */}
+                    {tableLoading && (
+                        <div className="absolute inset-0 z-20 bg-white/75 backdrop-blur-[2px] flex items-center justify-center transition-all">
+                            <div className="flex flex-col items-center gap-3 bg-white px-6 py-4 rounded-2xl shadow-xl border border-light-green/40">
+                                <span className="material-symbols-outlined text-4xl text-deep-green animate-spin">progress_activity</span>
+                                <span className="text-xs font-bold text-deep-green uppercase tracking-wider">Updating programs...</span>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
@@ -385,13 +414,14 @@ const AdminUniversitiesList = () => {
                                     <th className="p-5 font-extrabold text-deep-green text-sm uppercase tracking-wider">Course Name</th>
                                     <th className="p-5 font-extrabold text-deep-green text-sm uppercase tracking-wider">Institution</th>
                                     <th className="p-5 font-extrabold text-deep-green text-sm uppercase tracking-wider">Level & Location</th>
+                                    <th className="p-5 font-extrabold text-deep-green text-sm uppercase tracking-wider">Tuition Fee</th>
                                     <th className="p-5 font-extrabold text-deep-green text-sm uppercase tracking-wider text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-light-green/30">
                                 {universities.length === 0 ? (
                                     <tr>
-                                        <td colSpan="4" className="p-10 text-center text-deep-green/50 font-bold italic">
+                                        <td colSpan="5" className="p-10 text-center text-deep-green/50 font-bold italic">
                                             {hasActiveFilters
                                                 ? "No programs found matching your filters. Try adjusting your selection."
                                                 : "No programs found. Add one to get started!"
@@ -422,6 +452,12 @@ const AdminUniversitiesList = () => {
                                                 </div>
                                             </td>
                                             <td className="p-5">
+                                                <span className="text-xs font-bold text-deep-green bg-light-green/20 border border-light-green/40 px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                                                    <span className="material-symbols-outlined text-[13px]">payments</span>
+                                                    {uni.tuitionFee ? `${uni.currency || '$'}${Number(uni.tuitionFee).toLocaleString('en-IN')}` : 'N/A'}
+                                                </span>
+                                            </td>
+                                            <td className="p-5">
                                                 <div className="flex items-center justify-end gap-2">
                                                     <Link
                                                         to={`/admin/edit-university/${uni._id}`}
@@ -447,10 +483,79 @@ const AdminUniversitiesList = () => {
                     </div>
                 </div>
 
-                {/* Infinite Scroll Loader Sentinel */}
-                {hasMore && (
-                    <div ref={loaderRef} className="flex justify-center items-center py-10">
-                        <span className="material-symbols-outlined text-4xl text-deep-green animate-spin">refresh</span>
+                {/* Pagination Controls */}
+                {totalResultsCount > 0 && totalPages > 1 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border-2 border-light-green/50 shadow-md">
+                        {/* Page count & Per page selector */}
+                        <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-deep-green">
+                            <span>
+                                Showing Page <span className="font-extrabold text-deep-green text-sm">{page}</span> of <span className="font-extrabold text-deep-green text-sm">{totalPages}</span>
+                                <span className="text-deep-green/60 ml-1.5 font-medium">({totalResultsCount} total programs)</span>
+                            </span>
+                            <div className="flex items-center gap-1.5 pl-3 border-l border-light-green/50">
+                                <span className="text-deep-green/60">Per page:</span>
+                                <select 
+                                    value={limit}
+                                    onChange={(e) => handleLimitChange(Number(e.target.value))}
+                                    className="px-2 py-1 rounded-lg border border-light-green bg-white text-deep-green font-bold text-xs focus:outline-none focus:border-deep-green"
+                                >
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                    <option value={100}>100</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Pagination Buttons */}
+                        <div className="flex items-center gap-1.5">
+                            {/* Prev button */}
+                            <button
+                                onClick={() => handlePageChange(page - 1)}
+                                disabled={page <= 1 || tableLoading}
+                                className="flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-bold text-deep-green bg-light-green/20 hover:bg-light-green/40 transition-all disabled:opacity-30 disabled:cursor-not-allowed border border-light-green/50 active:scale-95 cursor-pointer"
+                                title="Previous Page"
+                            >
+                                <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                                <span className="hidden sm:inline">Prev</span>
+                            </button>
+
+                            {/* Page numbers */}
+                            {paginationItems.map((item, index) => {
+                                if (item === '...') {
+                                    return (
+                                        <span key={`ellipsis-${index}`} className="px-2 text-deep-green/40 font-bold select-none text-sm">
+                                            …
+                                        </span>
+                                    );
+                                }
+                                const isCurrent = item === page;
+                                return (
+                                    <button
+                                        key={`page-${item}`}
+                                        onClick={() => handlePageChange(item)}
+                                        disabled={tableLoading}
+                                        className={`min-w-[36px] h-[36px] flex items-center justify-center rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer ${
+                                            isCurrent
+                                                ? 'bg-blue-600 text-white shadow-md font-black ring-2 ring-blue-400/40'
+                                                : 'text-deep-green bg-white hover:bg-light-green/20 border border-light-green/50'
+                                        }`}
+                                    >
+                                        {item}
+                                    </button>
+                                );
+                            })}
+
+                            {/* Next button */}
+                            <button
+                                onClick={() => handlePageChange(page + 1)}
+                                disabled={page >= totalPages || tableLoading}
+                                className="flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-bold text-deep-green bg-light-green/20 hover:bg-light-green/40 transition-all disabled:opacity-30 disabled:cursor-not-allowed border border-light-green/50 active:scale-95 cursor-pointer"
+                                title="Next Page"
+                            >
+                                <span className="hidden sm:inline">Next</span>
+                                <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                            </button>
+                        </div>
                     </div>
                 )}
 

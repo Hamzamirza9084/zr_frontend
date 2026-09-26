@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { useNavigate, Link, useParams } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { selectUser, selectUserToken } from '../store/authSlice';
 
 // --- Utility Functions ---
 
@@ -15,11 +17,14 @@ const getCurrencySymbol = (country) => {
   // Asia
   if (c.includes('india')) return '₹';
   if (c.includes('japan')) return '¥';
-  if (c.includes('singapore')) return 'S$';
+  if (c.includes('singapore')) return 'SGD $';
+  // Middle East & Switzerland
+  if (c.includes('uae') || c.includes('emirates') || c.includes('dubai')) return 'AED ';
+  if (c.includes('switzerland')) return 'CHF ';
   // Oceania & Americas
-  if (c.includes('australia')) return 'A$';
-  if (c.includes('canada')) return 'C$';
-  if (c.includes('new zealand')) return 'NZ$';
+  if (c.includes('australia')) return 'AUD $';
+  if (c.includes('canada')) return 'CAD $';
+  if (c.includes('new zealand')) return 'NZD $';
   
   // Default (USA, etc.)
   return '$';
@@ -120,6 +125,7 @@ const AdminAddUniversity = () => {
     fieldOfStudy: "",
     duration: "",
     tuitionFee: "",
+    currency: "$",
     intakes: [],
 
     // Additional
@@ -164,28 +170,15 @@ const AdminAddUniversity = () => {
   const fileInputRef = useRef(null);
 
   // --- SECURITY CHECK: Redirect if not Admin ---
+  const user = useSelector(selectUser);
+  const token = useSelector(selectUserToken);
+
   useEffect(() => {
-    const checkAdminStatus = () => {
-      const userString = localStorage.getItem('user');
-
-      if (!userString) {
-        // No user logged in
-        alert("Please login as an Admin to access this page.");
-        navigate('/login'); // Or '/' depending on your route
-        return;
-      }
-
-      const user = JSON.parse(userString);
-
-      // Check for token and 'admin' role
-      if (!user.token || user.role !== 'admin') {
-        alert("Access Denied: You do not have permission to view this page.");
-        navigate('/'); // Redirect to landing page
-      }
-    };
-
-    checkAdminStatus();
-  }, [navigate]);
+    if (!user || !token || user.role !== 'admin') {
+      alert(user ? "Access Denied: You do not have permission to view this page." : "Please login as an Admin to access this page.");
+      navigate(user ? '/' : '/login');
+    }
+  }, [user, token, navigate]);
 
   // --- Fetch Existing Data for Edit Mode ---
   useEffect(() => {
@@ -198,6 +191,7 @@ const AdminAddUniversity = () => {
             // Normalize populated fields so `<select>` works with raw string IDs
             institutionId: data.institutionId?._id || data.institutionId || "",
             country: data.institutionId?.destinationId?.name || data.country || "",
+            currency: data.currency || "$",
             // Ensure fields are not undefined to prevent controlled/uncontrolled warnings
             tags: data.tags || [],
             intakes: data.intakes || [],
@@ -239,9 +233,7 @@ const AdminAddUniversity = () => {
 
     try {
       setUploadingLogo(true);
-      const userString = localStorage.getItem('user');
-      const user = userString ? JSON.parse(userString) : null;
-      const config = { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user?.token}` } };
+      const config = { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` } };
       const { data } = await axios.post('/api/universities/upload-logo', logoData, config);
       setFormData(prev => ({ ...prev, logo: data.url }));
     } catch (err) {
@@ -312,7 +304,7 @@ const AdminAddUniversity = () => {
       name: "", country: "", city: "", ranking: "", website: "", logo: "",
       minCgpa: "", maxBacklogs: "",
       gapAccepted: "No", gapLimit: "", englishRequirements: [], acceptsMOI: "No",
-      courseName: "", courseLink: "", courseLevel: "Master's Degree", fieldOfStudy: "", duration: "", tuitionFee: "", intakes: [],
+      courseName: "", courseLink: "", courseLevel: "Master's Degree", fieldOfStudy: "", duration: "", tuitionFee: "", currency: "$", intakes: [],
       casPriority: "Medium", internalProcessing: "No", appFee: "Free Waiver", successChance: "High", tags: []
     });
     setTagInput("");
@@ -371,8 +363,7 @@ const AdminAddUniversity = () => {
       let successCount = 0;
       let failCount = 0;
 
-      const user = JSON.parse(localStorage.getItem('user'));
-      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      const config = { headers: { Authorization: `Bearer ${token}` } };
 
       for (const row of dataRows) {
         // Define getValue outside try so it's accessible in catch block
@@ -440,6 +431,7 @@ const AdminAddUniversity = () => {
             fieldOfStudy: getValue('fieldOfStudy'),
             duration: getValue('duration'),
             tuitionFee: cleanFee(getValue('tuitionFee')),
+            currency: getValue('currency') || '$',
             intakes: parseArrayField(getValue('intakes')),
             minCgpa: getValue('minCgpa'),
             maxBacklogs: safeParseInt(getValue('maxBacklogs')),
@@ -494,14 +486,33 @@ const AdminAddUniversity = () => {
     reader.readAsText(file);
   };
 
+  // Computed: institutions filtered by selected destination
+  const filteredInstitutionsByDest = institutions.filter(i => {
+    if (!formData.country) return false;
+    const destIdOfInst = i.destinationId?._id || i.destinationId;
+    const destIdOfInput = destinations.find(d => d.name?.trim().toLowerCase() === formData.country?.trim().toLowerCase())?._id;
+    return destIdOfInst === destIdOfInput || (i.destinationId?.name || '').trim().toLowerCase() === (formData.country || '').trim().toLowerCase();
+  });
+  const uniqueInstitutionNames = [...new Map(
+    filteredInstitutionsByDest
+      .map(i => (i.name || '').trim())
+      .filter(n => n !== '')
+      .map(n => [n.toLowerCase(), n])
+  ).values()].sort();
+  const citiesForSelectedInstitution = selectedInstitutionName
+    ? filteredInstitutionsByDest.filter(i => (i.name || '').trim().toLowerCase() === selectedInstitutionName.trim().toLowerCase())
+    : [];
+  const existingInstMatch = showNewInstitutionInput && formData.name?.trim()
+    ? filteredInstitutionsByDest.find(i => (i.name || '').trim().toLowerCase() === formData.name.trim().toLowerCase())
+    : null;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Get the logged-in user from storage
-    const user = JSON.parse(localStorage.getItem('user'));
+    // Get the logged-in user from Redux
 
     // Redundant check (safe practice)
-    if (!user || !user.token || user.role !== 'admin') {
+    if (!user || !token || user.role !== 'admin') {
       alert("You must be logged in as Admin to do this.");
       return;
     }
@@ -532,7 +543,7 @@ const AdminAddUniversity = () => {
     try {
       const config = {
         headers: {
-          Authorization: `Bearer ${user.token}`, // Send token in header
+          Authorization: `Bearer ${token}`, // Send token in header
         },
       };
 
@@ -557,6 +568,11 @@ const AdminAddUniversity = () => {
 
       // Add Institution if Custom
       if (showNewInstitutionInput && formData.name.trim() && destinationIdToUse) {
+        if (existingInstMatch) {
+          alert(`"${formData.name.trim()}" is already there for ${formData.country}! Please select it from the Institution dropdown.`);
+          return;
+        }
+
         try {
           const instRes = await axios.post('/api/institutions', {
              name: formData.name.trim(),
@@ -571,7 +587,9 @@ const AdminAddUniversity = () => {
           setInstitutions(prev => [...prev, instRes.data]);
         } catch (err) {
           console.error("Could not append institution:", err);
-          throw new Error("Institution creation failed.");
+          const errMsg = err.response?.data?.message || "Institution is already there or creation failed.";
+          alert(errMsg);
+          return;
         }
       }
 
@@ -607,23 +625,6 @@ const AdminAddUniversity = () => {
     }
   };
 
-  // Computed: institutions filtered by selected destination
-  const filteredInstitutionsByDest = institutions.filter(i => {
-    if (!formData.country) return false;
-    const destIdOfInst = i.destinationId?._id || i.destinationId;
-    const destIdOfInput = destinations.find(d => d.name?.trim().toLowerCase() === formData.country?.trim().toLowerCase())?._id;
-    return destIdOfInst === destIdOfInput || (i.destinationId?.name || '').trim().toLowerCase() === (formData.country || '').trim().toLowerCase();
-  });
-  const uniqueInstitutionNames = [...new Map(
-    filteredInstitutionsByDest
-      .map(i => (i.name || '').trim())
-      .filter(n => n !== '')
-      .map(n => [n.toLowerCase(), n])
-  ).values()].sort();
-  const citiesForSelectedInstitution = selectedInstitutionName
-    ? filteredInstitutionsByDest.filter(i => (i.name || '').trim().toLowerCase() === selectedInstitutionName.trim().toLowerCase())
-    : [];
-
   return (
     <div className="flex flex-col lg:flex-row h-screen bg-deep-green overflow-hidden font-display">
 
@@ -658,7 +659,7 @@ const AdminAddUniversity = () => {
               View Students
             </Link>
 
-            {/* Added CSV Upload Button */}
+            {/* Added CSV Upload Button & Sample Template Download */}
             {!isEditMode && (
               <>
                 <button
@@ -670,6 +671,15 @@ const AdminAddUniversity = () => {
                   <span className="material-symbols-outlined">{isUploading ? 'hourglass_empty' : 'upload_file'}</span>
                   {isUploading ? 'Uploading...' : 'Bulk Upload'}
                 </button>
+                <a
+                  href="/Sample_unv.csv"
+                  download="Sample_unv.csv"
+                  className="px-4 py-2.5 rounded-xl border-2 border-white/20 bg-white/10 text-white font-bold hover:bg-white/20 transition-all flex items-center gap-1.5 text-xs shadow-sm cursor-pointer"
+                  title="Download Sample CSV Template"
+                >
+                  <span className="material-symbols-outlined text-[18px]">download</span>
+                  Sample CSV
+                </a>
                 <input
                   type="file"
                   accept=".csv"
@@ -728,7 +738,13 @@ const AdminAddUniversity = () => {
                       setSelectedCityIds([]);
                       setFormData(prev => ({ ...prev, country: "", institutionId: "", name: "" }));
                     } else {
-                      setFormData(prev => ({ ...prev, country: val, institutionId: "" }));
+                      const detectedCurrency = getCurrencySymbol(val);
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        country: val, 
+                        institutionId: "",
+                        currency: isEditMode ? prev.currency : (detectedCurrency || "$")
+                      }));
                       setShowNewInstitutionInput(false);
                       setSelectedInstitutionName("");
                       setSelectedCityIds([]);
@@ -883,6 +899,12 @@ const AdminAddUniversity = () => {
                    )}
                 </div>
                 <StyledInput label="Institution Name" name="name" value={formData.name} onChange={handleChange} placeholder="e.g. University of Westminster" className="md:col-span-2" />
+                {existingInstMatch && (
+                  <div className="md:col-span-2 p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl text-xs font-bold text-amber-800 flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-amber-600 text-[20px]">warning</span>
+                    <span>"{formData.name}" is already there for {formData.country}! Please select it from the dropdown above instead of creating a duplicate.</span>
+                  </div>
+                )}
                 <StyledInput label="City" name="city" value={formData.city} onChange={handleChange} placeholder="e.g. London" />
                 <StyledInput label="Global Ranking (Optional)" name="ranking" value={formData.ranking} onChange={handleChange} type="number" placeholder="e.g. 102" />
                 <StyledInput label="Website URL" name="website" value={formData.website} onChange={handleChange} placeholder="https://..." />
@@ -938,8 +960,43 @@ const AdminAddUniversity = () => {
                 options={["", "Arts", "Business, Management and Economics", "Elementary and High School", "Engineering and Technology", "English for Academic Studies", "Health Sciences, Medicine, Nursing, Paramedic and Kinesiology", "Law, Politics, Social, Community Service and Teaching", "Sciences"]}
               />
 
-              <StyledInput label="Duration" name="duration" value={formData.duration} onChange={handleChange} type="number" placeholder="e.g. 12" />
-              <StyledInput label="Tuition Fee" name="tuitionFee" value={formData.tuitionFee} onChange={handleChange} type="number" placeholder="e.g. 16000" />
+              <StyledInput label="Duration (Months)" name="duration" value={formData.duration} onChange={handleChange} type="number" placeholder="e.g. 12" />
+              
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-deep-green/80 ml-1 uppercase tracking-wide">Tuition Fee & Currency</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-1">
+                    <StyledSelect
+                      name="currency"
+                      value={formData.currency || "$"}
+                      onChange={handleChange}
+                      options={[
+                        { value: "$", label: "$ (USD)" },
+                        { value: "£", label: "£ (GBP)" },
+                        { value: "€", label: "€ (EUR)" },
+                        { value: "CAD $", label: "CAD $ (CAD)" },
+                        { value: "AUD $", label: "AUD $ (AUD)" },
+                        { value: "NZD $", label: "NZD $ (NZD)" },
+                        { value: "SGD $", label: "SGD $ (SGD)" },
+                        { value: "₹", label: "₹ (INR)" },
+                        { value: "¥", label: "¥ (JPY)" },
+                        { value: "AED ", label: "AED (AED)" },
+                        { value: "CHF ", label: "CHF (CHF)" },
+                      ]}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <input
+                      type="number"
+                      name="tuitionFee"
+                      value={formData.tuitionFee}
+                      onChange={handleChange}
+                      placeholder="e.g. 16000"
+                      className="w-full px-4 py-2.5 rounded-xl border-2 border-light-green bg-white text-deep-green placeholder:text-deep-green/30 focus:outline-none focus:border-deep-green focus:ring-0 transition-colors text-sm font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-bold text-deep-green mb-2">Intake Month/Year (Multiple)</label>
@@ -1211,7 +1268,7 @@ const AdminAddUniversity = () => {
             </div>
             <div>
               <p className="text-[10px] text-deep-green/40 font-black uppercase tracking-wider mb-1 mt-2">Tuition</p>
-              <p className="text-deep-green font-bold text-sm">{formData.tuitionFee ? `${getCurrencySymbol(formData.country)}${Number(formData.tuitionFee).toLocaleString('en-IN')}` : "$0"}</p>
+              <p className="text-deep-green font-bold text-sm">{formData.tuitionFee ? `${formData.currency || '$'}${Number(formData.tuitionFee).toLocaleString('en-IN')}` : `${formData.currency || '$'}0`}</p>
             </div>
             <div className="col-span-2 pt-2 border-t border-deep-green/10 mt-1">
               <p className="text-[10px] text-deep-green/40 font-black uppercase tracking-wider mb-1">Intakes</p>

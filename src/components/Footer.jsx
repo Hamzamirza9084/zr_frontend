@@ -1,4 +1,5 @@
 import React from 'react';
+import { Separator } from './ui/separator';
 
 const Footer = () => {
   return (
@@ -51,12 +52,15 @@ const Footer = () => {
         </div>
       </div>
 
-      {/* Bottom Bar */}
-      <div className="max-w-[1440px] mx-auto mt-16 pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-off-white/40">
-        <p>© 2026 Anvora Platform. All rights reserved.</p>
-        <div className="flex gap-6">
-          <a className="hover:text-white" href="#">Privacy Policy</a>
-          <a className="hover:text-white" href="#">Terms of Service</a>
+      {/* Bottom Bar — now using shadcn Separator */}
+      <div className="max-w-[1440px] mx-auto mt-16">
+        <Separator className="bg-white/10" />
+        <div className="pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-off-white/40">
+          <p>© 2026 Anvora Platform. All rights reserved.</p>
+          <div className="flex gap-6">
+            <a className="hover:text-white" href="#">Privacy Policy</a>
+            <a className="hover:text-white" href="#">Terms of Service</a>
+          </div>
         </div>
       </div>
     </footer>

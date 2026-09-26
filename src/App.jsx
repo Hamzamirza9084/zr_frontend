@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
+import { PageSkeleton } from './components/Skeletons';
 
 // Eagerly loaded (used on landing page)
 import LandingPage from './components/LandingPage';
@@ -19,16 +20,6 @@ const AdminManageGlobal = lazy(() => import('./components/AdminManageGlobal'));
 const MyApplications = lazy(() => import('./components/MyApplications'));
 const ProfileUpdate = lazy(() => import('./components/ProfileUpdate'));
 
-// Loading fallback
-const PageLoader = () => (
-  <div className="flex items-center justify-center min-h-[60vh]">
-    <div className="flex flex-col items-center gap-4">
-      <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-      <p className="text-sm text-deep-green/60 font-medium">Loading...</p>
-    </div>
-  </div>
-);
-
 const MainLayout = ({ children }) => (
   <div className="min-h-screen bg-background-light dark:bg-background-dark font-display text-deep-green dark:text-off-white overflow-x-hidden">
     <Header />
@@ -40,7 +31,7 @@ const MainLayout = ({ children }) => (
 function App() {
   return (
     <Router>
-      <Suspense fallback={<PageLoader />}>
+      <Suspense fallback={<PageSkeleton />}>
         <Routes>
           <Route path="/" element={
             <MainLayout>

@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css'; // Import Toastify CSS
 import Loader from './Loader'; // Import the Loader component
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Separator } from './ui/separator';
 
 const RegisterPage = () => {
   const navigate = useNavigate();
@@ -21,19 +25,31 @@ const RegisterPage = () => {
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); // New: Loading state
+  const [isLoading, setIsLoading] = useState(false);
 
-  // 2. Function to handle typing in inputs
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    // Clear error for this field when user starts typing
-    if (errors[e.target.name]) {
-        setErrors({ ...errors, [e.target.name]: null });
-    }
-  };
+  // 2. Function to handle typing in inputs — useCallback
+  const handleChange = useCallback((e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    setErrors(prev => {
+      if (prev[name]) {
+        return { ...prev, [name]: null };
+      }
+      return prev;
+    });
+  }, []);
+
+  // Toggle password visibility — useCallback
+  const togglePassword = useCallback(() => {
+    setShowPassword(prev => !prev);
+  }, []);
+
+  const toggleConfirmPassword = useCallback(() => {
+    setShowConfirmPassword(prev => !prev);
+  }, []);
 
   // Validation Logic
-  const validateForm = () => {
+  const validateForm = useCallback(() => {
     let newErrors = {};
     let isValid = true;
 
@@ -79,7 +95,6 @@ const RegisterPage = () => {
 
     setErrors(newErrors);
     
-    // Optional: Toast error if validation fails globally
     if (!isValid) {
         toast.warn("Please fix the errors in the form.", {
             position: "top-right",
@@ -88,21 +103,19 @@ const RegisterPage = () => {
     }
 
     return isValid;
-  };
+  }, [formData]);
 
-  // 3. Function to submit data to backend
-  const handleSubmit = async (e) => {
+  // 3. Function to submit data to backend — useCallback
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
 
-    // Run Validation before submitting
     if (!validateForm()) {
         return;
     }
 
-    setIsLoading(true); // Start loading
+    setIsLoading(true);
 
     try {
-      // Backend expects: name, email, phone, password
       const response = await axios.post('/api/auth/register', {
         name: formData.fullName,
         email: formData.email,
@@ -111,7 +124,6 @@ const RegisterPage = () => {
       });
 
       if (response.data) {
-        // Success Toast
         toast.success("Registration Successful! Redirecting to Login...", {
             position: "top-center",
             autoClose: 2000,
@@ -121,18 +133,16 @@ const RegisterPage = () => {
             draggable: true,
             progress: undefined,
             theme: "colored",
-            // Navigate after the toast closes
             onClose: () => {
-              setIsLoading(false); // Stop loading when redirecting
+              setIsLoading(false);
               navigate('/login');
             }
         });
       }
     } catch (error) {
       console.error(error);
-      setIsLoading(false); // Stop loading on error
+      setIsLoading(false);
       
-      // Error Toast
       const errMsg = error.response?.data?.message || "Registration failed";
       toast.error(errMsg, {
         position: "top-center",
@@ -145,7 +155,7 @@ const RegisterPage = () => {
         theme: "colored",
       });
     }
-  };
+  }, [formData, validateForm, navigate]);
 
   // Helper component for Error Message
   const ErrorMsg = ({ msg }) => (
@@ -202,16 +212,20 @@ const RegisterPage = () => {
 
             <form className="grid grid-cols-1 md:grid-cols-2 gap-5" onSubmit={handleSubmit}>
               <div className="md:col-span-2">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-deep-green/40 mb-2 border-b border-light-green pb-2">Basic Information</h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-deep-green/40 whitespace-nowrap">Basic Information</h3>
+                  <Separator className="flex-1" />
+                </div>
               </div>
               
               <div className="flex flex-col gap-1.5 md:col-span-2">
-                <label className="text-sm font-bold text-deep-green/80 ml-1">Full Name</label>
-                <input 
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input 
                   name="fullName"
+                  id="fullName"
                   value={formData.fullName}
                   onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-xl border-2 ${errors.fullName ? 'border-red-500' : 'border-light-green'} bg-white focus:ring-0 focus:border-deep-green transition-colors`} 
+                  className={errors.fullName ? 'border-red-500' : ''}
                   placeholder="John Doe" 
                   type="text" 
                 />
@@ -219,12 +233,13 @@ const RegisterPage = () => {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-bold text-deep-green/80 ml-1">Email Address</label>
-                <input 
+                <Label htmlFor="email">Email Address</Label>
+                <Input 
                   name="email"
+                  id="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-xl border-2 ${errors.email ? 'border-red-500' : 'border-light-green'} bg-white focus:ring-0 focus:border-deep-green transition-colors`} 
+                  className={errors.email ? 'border-red-500' : ''}
                   placeholder="john@example.com" 
                   type="email" 
                 />
@@ -232,12 +247,13 @@ const RegisterPage = () => {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-bold text-deep-green/80 ml-1">Phone Number</label>
-                <input 
+                <Label htmlFor="phoneNumber">Phone Number</Label>
+                <Input 
                   name="phoneNumber"
+                  id="phoneNumber"
                   value={formData.phoneNumber}
                   onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-xl border-2 ${errors.phoneNumber ? 'border-red-500' : 'border-light-green'} bg-white focus:ring-0 focus:border-deep-green transition-colors`} 
+                  className={errors.phoneNumber ? 'border-red-500' : ''}
                   placeholder="+1 (555) 000-0000" 
                   type="tel" 
                 />
@@ -245,19 +261,20 @@ const RegisterPage = () => {
               </div>
 
               <div className="flex flex-col gap-1.5 md:col-span-2">
-                <label className="text-sm font-bold text-deep-green/80 ml-1">Password</label>
+                <Label htmlFor="password">Password</Label>
                 <div className="relative">
-                  <input 
+                  <Input 
                     name="password"
+                    id="password"
                     value={formData.password}
                     onChange={handleChange}
-                    className={`w-full px-4 py-3 pr-12 rounded-xl border-2 ${errors.password ? 'border-red-500' : 'border-light-green'} bg-white focus:ring-0 focus:border-deep-green transition-colors`} 
+                    className={`pr-12 ${errors.password ? 'border-red-500' : ''}`}
                     placeholder="••••••••" 
                     type={showPassword ? "text" : "password"} 
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={togglePassword}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
                   >
                     {showPassword ? (
@@ -276,19 +293,20 @@ const RegisterPage = () => {
               </div>
 
               <div className="flex flex-col gap-1.5 md:col-span-2">
-                <label className="text-sm font-bold text-deep-green/80 ml-1">Confirm Password</label>
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
                 <div className="relative">
-                  <input 
+                  <Input 
                     name="confirmPassword"
+                    id="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    className={`w-full px-4 py-3 pr-12 rounded-xl border-2 ${errors.confirmPassword ? 'border-red-500' : 'border-light-green'} bg-white focus:ring-0 focus:border-deep-green transition-colors`} 
+                    className={`pr-12 ${errors.confirmPassword ? 'border-red-500' : ''}`}
                     placeholder="••••••••" 
                     type={showConfirmPassword ? "text" : "password"} 
                   />
                   <button
                     type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    onClick={toggleConfirmPassword}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
                   >
                     {showConfirmPassword ? (
@@ -307,13 +325,14 @@ const RegisterPage = () => {
               </div>
 
               <div className="md:col-span-2">
-                <button 
+                <Button 
                   type="submit" 
                   disabled={isLoading}
-                  className="w-full h-14 bg-primary text-deep-green font-bold text-lg rounded-xl shadow-[0px_4px_0px_0px_#347928] hover:translate-y-[2px] hover:shadow-[0px_2px_0px_0px_#347928] active:translate-y-[4px] active:shadow-none transition-all mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full"
+                  size="lg"
                 >
                   {isLoading ? 'Processing...' : 'Create Account'}
-                </button>
+                </Button>
               </div>
             </form>
 

@@ -2,6 +2,9 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import TextType from './TextType'; // Assuming this is your typewriter component
+import { Button } from './ui/button';
+import { Card, CardContent } from './ui/card';
+import { Badge } from './ui/badge';
 
 const LandingPage = () => {
   const navigate = useNavigate();
@@ -34,18 +37,21 @@ const LandingPage = () => {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4">
-                <button 
+                <Button 
+                  variant="success" 
+                  size="xl"
                   onClick={() => navigate('/colleges')}
-                  className="px-8 py-4 bg-[#347928] hover:bg-[#2a6220] text-white text-lg font-bold rounded-full shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1"
                 >
                   Explore Schools
-                </button>
-                <button 
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="xl"
+                  className="border-[#347928] text-[#347928] hover:bg-green-50"
                   onClick={() => navigate('/register')}
-                  className="px-8 py-4 bg-white border-2 border-[#347928] text-[#347928] text-lg font-bold rounded-full hover:bg-green-50 transition-all"
                 >
                   Student Registration
-                </button>
+                </Button>
               </div>
             </motion.div>
 
@@ -71,11 +77,11 @@ const LandingPage = () => {
                 </picture>
               </div>
               
-              {/* Floating Badge Example */}
+              {/* Floating Badge */}
               <div className="absolute -bottom-6 -left-6 bg-white p-4 rounded-xl shadow-xl border border-gray-100 flex items-center gap-3 animate-bounce-slow">
-                <div className="bg-[#FCCD2A] p-2 rounded-full">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                </div>
+                <Badge className="bg-[#FCCD2A] text-white border-transparent p-2 rounded-full h-auto">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                </Badge>
                 <div>
                   <p className="text-sm text-gray-500 font-medium">Acceptance Rate</p>
                   <p className="text-xl font-bold text-gray-900">98.5%</p>
@@ -120,16 +126,16 @@ const LandingPage = () => {
               { title: 'Submit Application', desc: 'Apply to multiple schools with a single profile.' },
               { title: 'Get Accepted', desc: 'Receive guidance on visa and travel arrangements.' }
             ].map((step, i) => (
-              <motion.div 
-                whileHover={{ y: -10 }}
-                key={i} 
-                className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 text-center"
-              >
-                <div className="w-16 h-16 bg-[#FCCD2A]/20 text-[#347928] rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-6">
-                  {i + 1}
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-3">{step.title}</h3>
-                <p className="text-gray-600 leading-relaxed">{step.desc}</p>
+              <motion.div whileHover={{ y: -10 }} key={i}>
+                <Card className="p-8 text-center shadow-lg hover:shadow-xl transition-shadow">
+                  <CardContent className="p-0">
+                    <div className="w-16 h-16 bg-[#FCCD2A]/20 text-[#347928] rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-6">
+                      {i + 1}
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-3">{step.title}</h3>
+                    <p className="text-gray-600 leading-relaxed">{step.desc}</p>
+                  </CardContent>
+                </Card>
               </motion.div>
             ))}
           </div>

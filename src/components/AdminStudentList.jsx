@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { selectUser, selectUserToken } from '../store/authSlice';
+import { AdminTableSkeleton } from './Skeletons';
 
 const AdminStudentList = () => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const user = useSelector(selectUser);
+  const token = useSelector(selectUserToken);
 
   useEffect(() => {
     const fetchStudents = async () => {
       try {
-        const user = JSON.parse(localStorage.getItem('user'));
         if (!user || user.role !== 'admin') {
           navigate('/login');
           return;
@@ -19,7 +23,7 @@ const AdminStudentList = () => {
 
         const config = {
           headers: {
-            Authorization: `Bearer ${user.token}`,
+            Authorization: `Bearer ${token}`,
           },
         };
 
@@ -33,9 +37,9 @@ const AdminStudentList = () => {
     };
 
     fetchStudents();
-  }, [navigate]);
+  }, [navigate, user, token]);
 
-  if (loading) return <div className="text-center mt-10 font-bold text-deep-green">Loading...</div>;
+  if (loading) return <AdminTableSkeleton rows={5} />;
   if (error) return <div className="text-center mt-10 text-red-500 font-bold">{error}</div>;
 
   return (

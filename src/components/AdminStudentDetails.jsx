@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { useSelector } from 'react-redux';
+import { selectUser, selectUserToken } from '../store/authSlice';
+import { ProfileSkeleton } from './Skeletons';
 
 const AdminStudentDetails = () => {
   const { id } = useParams();
@@ -8,11 +11,12 @@ const AdminStudentDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const user = useSelector(selectUser);
+  const token = useSelector(selectUserToken);
 
   useEffect(() => {
     const fetchStudent = async () => {
       try {
-        const user = JSON.parse(localStorage.getItem('user'));
         if (!user || user.role !== 'admin') {
           navigate('/login');
           return;
@@ -20,7 +24,7 @@ const AdminStudentDetails = () => {
 
         const config = {
           headers: {
-            Authorization: `Bearer ${user.token}`,
+            Authorization: `Bearer ${token}`,
           },
         };
 
@@ -34,9 +38,9 @@ const AdminStudentDetails = () => {
     };
 
     fetchStudent();
-  }, [id, navigate]);
+  }, [id, navigate, user, token]);
 
-  if (loading) return <div className="text-center mt-10">Loading...</div>;
+  if (loading) return <ProfileSkeleton />;
   if (error) return <div className="text-center mt-10 text-red-500">{error}</div>;
   if (!student) return <div className="text-center mt-10">Student not found</div>;
 

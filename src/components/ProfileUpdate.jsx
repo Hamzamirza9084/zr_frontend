@@ -4,9 +4,14 @@ import {
   MapPin, Globe, GraduationCap, CheckCircle 
 } from 'lucide-react';
 import axios from 'axios';
+import { useSelector, useDispatch } from 'react-redux';
+import { selectUser, selectUserToken, updateProfile } from '../store/authSlice';
 
 const ProfileUpdate = () => {
   // --- STATE MANAGEMENT ---
+  const dispatch = useDispatch();
+  const reduxUser = useSelector(selectUser);
+  const token = useSelector(selectUserToken);
   const [errors, setErrors] = useState({});
   const [formData, setFormData] = useState({
     documents: [
@@ -58,8 +63,8 @@ const ProfileUpdate = () => {
   // Load existing user profile into form on mount
   useEffect(() => {
     try {
-      const stored = JSON.parse(localStorage.getItem('user'));
-      if (stored) {
+      if (reduxUser) {
+        const stored = reduxUser;
         const toDateInput = (d) => {
           if (!d) return '';
           const dt = (typeof d === 'string' || typeof d === 'number') ? new Date(d) : d;
@@ -262,10 +267,7 @@ const ProfileUpdate = () => {
     }
 
     try {
-      // Get token from user object stored in localStorage
-      const user = JSON.parse(localStorage.getItem('user'));
-      const token = user?.token;
-
+      // Get token from Redux store
       if (!token) {
         alert("Error: Authentication token not found. Please log in again.");
         return;
@@ -349,14 +351,8 @@ const ProfileUpdate = () => {
         documents: Array.isArray(data.documents) ? data.documents : prev.documents
       }));
 
-      // Update stored user object (keeps token and latest profile)
-      try {
-        const current = JSON.parse(localStorage.getItem('user')) || {};
-        const updatedUser = { ...current, ...data };
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-      } catch (err) {
-        // ignore storage errors
-      }
+      // Update Redux store (which also persists to localStorage)
+      dispatch(updateProfile(data));
 
       alert("Profile Updated Successfully!");
     } catch (error) {
@@ -377,8 +373,6 @@ const ProfileUpdate = () => {
     }
 
     try {
-      const user = JSON.parse(localStorage.getItem('user'));
-      const token = user?.token;
       if (!token) return alert('Please login to upload files');
 
       const fd = new FormData();
@@ -394,12 +388,8 @@ const ProfileUpdate = () => {
       const docs = res.data.documents;
       setFormData(prev => ({ ...prev, documents: docs }));
 
-      // update localStorage user
-      try {
-        const current = JSON.parse(localStorage.getItem('user')) || {};
-        const updated = { ...current, documents: docs };
-        localStorage.setItem('user', JSON.stringify(updated));
-      } catch (err) {}
+      // Update Redux store
+      dispatch(updateProfile({ documents: docs }));
     } catch (err) {
       console.error(err.response?.data || err.message);
       alert(err.response?.data?.message || 'Upload failed');
@@ -416,8 +406,6 @@ const ProfileUpdate = () => {
     if (!confirm('Delete this document?')) return;
 
     try {
-      const user = JSON.parse(localStorage.getItem('user'));
-      const token = user?.token;
       if (!token) return alert('Please login to delete files');
 
       const res = await axios.delete('/api/users/documents', {
@@ -428,11 +416,8 @@ const ProfileUpdate = () => {
       const docs = res.data.documents;
       setFormData(prev => ({ ...prev, documents: docs }));
 
-      try {
-        const current = JSON.parse(localStorage.getItem('user')) || {};
-        const updated = { ...current, documents: docs };
-        localStorage.setItem('user', JSON.stringify(updated));
-      } catch (err) {}
+      // Update Redux store
+      dispatch(updateProfile({ documents: docs }));
     } catch (err) {
       console.error(err.response?.data || err.message);
       alert(err.response?.data?.message || 'Delete failed');
