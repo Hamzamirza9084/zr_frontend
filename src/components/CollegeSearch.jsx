@@ -921,7 +921,7 @@ const CollegeSearch = () => {
       </aside>
 
       {/* Main Content Area */}
-      <main ref={mainScrollRef} className="flex-1 overflow-y-auto p-6 md:p-12 relative bg-[#0f4c3a] custom-scrollbar">
+      <main ref={mainScrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-10 relative bg-[#0f4c3a] custom-scrollbar">
         <div className="max-w-6xl mx-auto">
 
           {/* Header */}
@@ -1089,44 +1089,66 @@ const CollegeSearch = () => {
 
                     {/* Available Intakes */}
                     <div className="px-6 py-4 border-t border-gray-100">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Available Intakes</p>
-                      <div className="flex gap-3">
-                        {college.intakes ? (
-                          typeof college.intakes === 'string' ? (
-                            college.intakes.split(',').slice(0, 3).map((intake, i) => (
-                              <span key={i} className="px-4 py-2 bg-[#0f4c3a]/5 border border-[#0f4c3a]/10 rounded-lg text-xs font-bold text-[#0f4c3a]">
-                                {intake.trim()}
-                              </span>
-                            ))
-                          ) : (
-                            Array.isArray(college.intakes) && college.intakes.slice(0, 3).map((intake, i) => (
-                              <span key={i} className="px-4 py-2 bg-[#0f4c3a]/5 border border-[#0f4c3a]/10 rounded-lg text-xs font-bold text-[#0f4c3a]">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">Available Intakes</p>
+                      {(() => {
+                        const rawIntakes = Array.isArray(college.intakes)
+                          ? college.intakes.flatMap(item => typeof item === 'string' ? item.split(',') : [item])
+                          : typeof college.intakes === 'string'
+                            ? college.intakes.split(',')
+                            : [];
+                        const intakesList = rawIntakes.map(s => String(s).trim()).filter(Boolean);
+
+                        if (intakesList.length === 0) {
+                          return (
+                            <span className="px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold text-gray-400 inline-block">
+                              Check availability
+                            </span>
+                          );
+                        }
+
+                        const visibleIntakes = intakesList.slice(0, 3);
+                        const remainingCount = intakesList.length - visibleIntakes.length;
+
+                        return (
+                          <div className="flex flex-wrap gap-2 items-center">
+                            {visibleIntakes.map((intake, i) => (
+                              <span
+                                key={i}
+                                className="px-3 py-1.5 bg-[#0f4c3a]/5 border border-[#0f4c3a]/10 rounded-lg text-xs font-bold text-[#0f4c3a] whitespace-nowrap"
+                              >
                                 {intake}
                               </span>
-                            ))
-                          )
-                        ) : (
-                          <span className="px-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold text-gray-400">
-                            Check availability
-                          </span>
-                        )}
-                      </div>
+                            ))}
+                            {remainingCount > 0 && (
+                              <span className="text-[11px] font-bold text-[#0f4c3a]/80 bg-[#0f4c3a]/10 border border-[#0f4c3a]/20 px-2 py-1 rounded-lg whitespace-nowrap">
+                                +{remainingCount} more
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="px-6 py-5 flex gap-3 items-center mt-auto border-t border-gray-100">
+                    <div className="px-4 sm:px-6 py-4 flex gap-2.5 items-center mt-auto border-t border-gray-100">
                       <Button
                         onClick={() => handleApply(college._id)}
-                        className="flex-1 py-3"
+                        className="flex-1 min-w-0 h-11 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(15,76,58,1)] hover:shadow-[1px_1px_0px_0px_rgba(15,76,58,1)] active:translate-y-[1px]"
                       >
-                        Apply Now
-                        <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                        <span className="truncate">Apply Now</span>
+                        <span className="material-symbols-outlined text-[16px] shrink-0">arrow_forward</span>
                       </Button>
                       <button
+                        type="button"
                         onClick={() => toggleSave(college._id)}
-                        className={`transition-all duration-200 p-2.5 rounded-xl border ${savedColleges.includes(college._id) ? 'border-pink-200 bg-pink-50 text-pink-500' : 'border-gray-200 bg-gray-50 text-gray-400 hover:text-pink-400 hover:border-pink-200 hover:bg-pink-50'}`}
+                        className={`size-11 shrink-0 rounded-xl border flex items-center justify-center transition-all duration-200 cursor-pointer active:scale-95 ${
+                          savedColleges.includes(college._id)
+                            ? 'border-pink-200 bg-pink-50 text-pink-500 shadow-sm'
+                            : 'border-gray-200 bg-gray-50 text-gray-400 hover:text-pink-500 hover:border-pink-200 hover:bg-pink-50'
+                        }`}
+                        title={savedColleges.includes(college._id) ? "Remove from saved" : "Save university"}
                       >
-                        <span className="material-symbols-outlined text-2xl">
+                        <span className="material-symbols-outlined text-[20px]">
                           {savedColleges.includes(college._id) ? 'favorite' : 'favorite_border'}
                         </span>
                       </button>

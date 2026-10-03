@@ -418,10 +418,26 @@ const AdminAddUniversity = () => {
             return isNaN(parsed) ? null : parsed;
           };
 
+          const rowUniName = (getValue('name') || '').trim();
+          const rowCity = (getValue('city') || '').trim();
+          let matchedInstId = '';
+          if (rowUniName) {
+            const foundInst = institutions.find(i => 
+              i.name?.toLowerCase().trim() === rowUniName.toLowerCase() &&
+              (!rowCity || !i.city || i.city.toLowerCase().trim() === rowCity.toLowerCase())
+            ) || institutions.find(i => 
+              i.name?.toLowerCase().trim() === rowUniName.toLowerCase()
+            );
+            if (foundInst) {
+              matchedInstId = foundInst._id;
+            }
+          }
+
           const payload = {
-            name: getValue('name'),
+            institutionId: matchedInstId || undefined,
+            name: rowUniName,
             country: getValue('country'),
-            city: getValue('city'),
+            city: rowCity,
             ranking: getValue('ranking'),
             website: getValue('website'),
             logo: getValue('logo'),
